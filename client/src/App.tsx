@@ -1,16 +1,18 @@
 import { useState } from "react";
-import { checkSystem } from "./api.js";
+import { checkSystem, Category } from "./api.js";
 
 type UiState = "idle" | "loading" | "success" | "error";
 
 export default function App() {
   const [state, setState] = useState<UiState>("idle");
+  const [categories, setCategories] = useState<Category[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
 
   async function handleCheck() {
     setState("loading");
     try {
-      await checkSystem();
+      const result = await checkSystem();
+      setCategories(result.categories);
       setState("success");
     } catch {
       setErrorMessage("Unable to connect to TokTickIT API");
@@ -29,7 +31,15 @@ export default function App() {
       </button>
 
       {state === "success" && (
-        <p className="mt-3">System Status: <strong>Online</strong></p>
+        <div className="mt-3">
+          <p>System Status: <strong>Online</strong></p>
+          <p>Supported Request Categories:</p>
+          <ul>
+            {categories.map((c) => (
+              <li key={c.id}>{c.name}</li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {state === "error" && (
