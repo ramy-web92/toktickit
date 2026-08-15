@@ -1,19 +1,22 @@
-# Lab 1 — Peer Review Record  (fill this in)
+# Lab 1 — Peer Review
 
-**Author:** <your name> — <student id> — GitHub: @<username>
-**Peer reviewer:** <partner name> — <student id> — GitHub: @<username>
+**Reviewer name:** [nom de ton pote]
+**Reviewer student ID:** [son ID étudiant]
+**Reviewer GitHub username:** [son pseudo GitHub]
 
-## Pull Requests I authored (reviewed by my partner)
-| PR | Branch | Reviewer verdict |
-|----|--------|------------------|
-|    | feature/1-project-foundation |  |
-|    | feature/2-health-check |  |
-|    | feature/3-category-seed |  |
-|    | feature/4-category-list |  |
+## Pull Requests Reviewed by My Partner
 
-Reviewer comment I received: <...>
-How I responded: <...>
+- PR #1 (feature/1-project-foundation): [lien PR]
+- PR #2 (feature/2-health-check): [lien PR]
+- PR #3 (feature/3-category-seed): [lien PR]
+- PR #4 (feature/4-category-list): [lien PR]
 
-## Pull Requests I reviewed for my partner
-My comment: <...>
-Partner's response: <...>
+**Review comment from my partner:** [colle son vrai commentaire ici]
+**My response:** [ta réponse]
+
+## Pull Requests I Reviewed for My Partner
+
+- [lien vers ses PR à lui]
+
+**My review comment:** [ton commentaire]
+**Their response:** [sa réponse]

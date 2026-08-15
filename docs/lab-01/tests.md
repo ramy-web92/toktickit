@@ -1,13 +1,13 @@
-# Lab 1 — Test Plan and Evidence  (fill this in)
+# Lab 1 — Tests
 
-All test files live under server/tests/lab-01/ and client/tests/lab-01/.
+Test files: `tests/lab-01/`
 
-| # | Tool | Test | Result |
-|---|------|------|--------|
-| 1 | Supertest | GET /api/health returns 200, status=ok | |
-| 2 | Supertest | GET /api/categories returns 4 seeded categories in id order | |
-| 3 | Vitest | Heading renders | |
-| 4 | Vitest | Success state shows Online + category list | |
-| 5 | Vitest | Error state shows Offline + message | |
+| Test File | Tool | Test Description |
+|---|---|---|
+| API-01 | Supertest | Health endpoint returns 200 and expected JSON |
+| API-02 | Supertest | Categories endpoint returns the four seeded categories |
+| UI-01 | Vitest | TokTickIT heading renders |
+| UI-02 | Vitest | Success state shows Online and the seeded categories |
+| UI-03 | Vitest | Error state shows an Offline message when the API is unavailable |
 
-Paste your passing terminal output / screenshot below.
+All tests pass on the main 
