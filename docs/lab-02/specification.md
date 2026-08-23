@@ -352,7 +352,7 @@ See `api-spec.md` for full detail. Endpoints (all rooted at `/api/v1`, JSON, cam
 
 
 
-&#x20;11) Assumptions and Décisions
+11) Assumptions and Décisions
 
 
 
@@ -363,4 +363,10 @@ Ticket Number format
 Auth deferral: the DevRequester model introduced here is temporary and will be replaced (not extended) by a real User/session model in Lab 3.
 
 IT Priority visibility: shown as read-only, equal to Requested Priority in Lab 2, since no IT Staff workflow exists yet to change it.
+
+- **URL identifier choice**: Ticket Detail and related endpoints use the internal `id` (not 
+  `ticketNumber`) in the URL path for simplicity and consistency with Prisma's primary key. 
+  `ticketNumber` remains the user-facing identifier shown in the UI and used for search, but 
+  the API path relies on `id` since it's already indexed as the primary key and avoids a 
+  second unique lookup.
 
