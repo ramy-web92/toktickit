@@ -12,7 +12,7 @@
 
 
 
-\## PR #16 — docs(lab2): sprint specification, API/UI spec, test plan
+\## PR #10 — docs(lab2): sprint specification, API/UI spec, test plan
 
 \- \*\*Link\*\*: https://github.com/ramy-web92/toktickit/pull/11
 
@@ -34,7 +34,7 @@
 
 
 
-\## PR #12 — feat(lab2): Development Requester context
+\## PR #16 — feat(lab2): Development Requester context
 
 \- \*\*Link\*\*: https://github.com/ramy-web92/toktickit/pull/16
 
@@ -59,4 +59,30 @@
 \- \*\*My response\*\*: "Thank you for your feedback."
 
 \- \*\*Status\*\*: ✅ Approved
+
+
+
+\## PR #18 — feat(lab2): My Tickets list with search, filters, pagination
+
+\- \*\*Link\*\*: https://github.com/ramy-web92/toktickit/pull/18
+
+\- \*\*Comment received\*\*: "Nice, the empty vs no-results distinction works well! One thing: the 
+
+&#x20; hasEverHadTickets state feels a bit fragile since it's only updated when there are no active 
+
+&#x20; filters — if a requester has tickets but you load the page with a filter already applied 
+
+&#x20; somehow, could show the wrong message. Not urgent, just flagging."
+
+\- \*\*My response\*\*: "Good catch, that's a fair edge case. For Lab 2 there's no way to arrive with 
+
+&#x20; a pre-applied filter (filters always start empty on mount), so it doesn't trigger in practice, 
+
+&#x20; but I'll keep it in mind if we add URL-based filter persistence later."
+
+\- \*\*Status\*\*: ✅ Approved
+
+
+
+
 
