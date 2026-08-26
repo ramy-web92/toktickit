@@ -26,6 +26,7 @@ export default function CreateTicket({ requester, categories, onCreated }: Props
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [state, setState] = useState<FormState>("idle");
   const [ticketNumber, setTicketNumber] = useState("");
+  const [attachmentResults, setAttachmentResults] = useState<{ fileName: string; status: string; reason?: string }[]>([]);
   const [apiError, setApiError] = useState("");
 
   useEffect(() => {
@@ -72,6 +73,7 @@ export default function CreateTicket({ requester, categories, onCreated }: Props
         attachments: files,
       });
       setTicketNumber(result.ticket.ticketNumber);
+            setAttachmentResults(result.attachmentResults || []);
       setState("success");
       onCreated(result.ticket.ticketNumber);
     } catch (err: any) {
@@ -84,13 +86,22 @@ export default function CreateTicket({ requester, categories, onCreated }: Props
     }
   }
 
-  if (state === "success") {
+    if (state === "success") {
     return (
       <div className="alert alert-success mt-4">
         <h5>Ticket Created</h5>
         <p>
           Your ticket number is <strong>{ticketNumber}</strong>.
         </p>
+        {attachmentResults.length > 0 && (
+          <ul className="mb-0">
+            {attachmentResults.map((a, i) => (
+              <li key={i} className={a.status === "REJECTED" ? "text-danger" : ""}>
+                {a.fileName}: {a.status === "REJECTED" ? `Rejected (${a.reason})` : "Uploaded"}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     );
   }

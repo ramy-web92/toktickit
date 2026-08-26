@@ -56,6 +56,65 @@ app.get("/api/related-systems", async (_req: Request, res: Response) => {
   }
 });
 
+app.get("/api/tickets", async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const requesterId = Number(req.query.requesterId);
+
+    if (!requesterId) {
+      return res.status(400).json({ error: { code: "MISSING_REQUESTER_ID" } });
+    }
+
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const allowedPageSizes = [10, 25, 50];
+    const pageSize = allowedPageSizes.includes(Number(req.query.pageSize))
+      ? Number(req.query.pageSize)
+      : 10;
+
+    const search = (req.query.search as string) || "";
+    const categoryId = req.query.categoryId ? Number(req.query.categoryId) : undefined;
+    const requestedPriority = req.query.requestedPriority as string | undefined;
+    const currentStatus = req.query.currentStatus as string | undefined;
+
+    const where: any = { requesterId };
+    if (search) {
+      where.OR = [
+        { ticketNumber: { contains: search, mode: "insensitive" } },
+        { summary: { contains: search, mode: "insensitive" } },
+      ];
+    }
+    if (categoryId) where.categoryId = categoryId;
+    if (requestedPriority) where.requestedPriority = requestedPriority;
+    if (currentStatus) where.currentStatus = currentStatus;
+
+    const [tickets, totalItems] = await Promise.all([
+      prisma.ticket.findMany({
+        where,
+        select: {
+          id: true,
+          ticketNumber: true,
+          summary: true,
+          requestedPriority: true,
+          itPriority: true,
+          currentStatus: true,
+          updatedAt: true,
+          category: { select: { name: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.ticket.count({ where }),
+    ]);
+
+    res.status(200).json({
+      tickets,
+      pagination: { page, pageSize, totalItems, totalPages: Math.ceil(totalItems / pageSize) },
+    });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
 
 app.post("/api/tickets", upload.array("attachments", 5), async (req: Request, res: Response) => {
   const { requesterId, categoryId, relatedSystemId, summary, description, requestedPriority } = req.body;
@@ -92,7 +151,7 @@ app.post("/api/tickets", upload.array("attachments", 5), async (req: Request, re
         itPriority: requestedPriority,
       },
     });
- 
+
     const files = (req.files as Express.Multer.File[]) || [];
     const allowedTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
     const attachmentResults = [];
@@ -116,7 +175,102 @@ app.post("/api/tickets", upload.array("attachments", 5), async (req: Request, re
     }
 
     res.status(201).json({ ticket, attachmentResults });
-    
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
+
+app.get("/api/tickets/:id", async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const ticketId = Number(req.params.id);
+    const requesterId = Number(req.query.requesterId);
+
+    if (!requesterId) {
+      return res.status(400).json({ error: { code: "MISSING_REQUESTER_ID" } });
+    }
+
+    const ticket = await prisma.ticket.findFirst({
+      where: { id: ticketId, requesterId },
+      include: {
+        category: { select: { name: true } },
+        relatedSystem: { select: { name: true } },
+        attachments: {
+          select: {
+            id: true,
+            originalFileName: true,
+            sizeBytes: true,
+            uploadedAt: true,
+            isRemoved: true,
+            removedAt: true,
+            removalReason: true,
+          },
+        },
+      },
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "TICKET_NOT_FOUND" } });
+    }
+
+    res.status(200).json({ ticket });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
+
+app.get("/api/attachments/:id/download", async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const attachmentId = Number(req.params.id);
+    const requesterId = Number(req.query.requesterId);
+
+    const attachment = await prisma.attachment.findFirst({
+      where: { id: attachmentId, ticket: { requesterId } },
+    });
+
+    if (!attachment) {
+      return res.status(404).json({ error: { code: "ATTACHMENT_NOT_FOUND" } });
+    }
+    if (attachment.isRemoved) {
+      return res.status(410).json({ error: { code: "ATTACHMENT_REMOVED" } });
+    }
+
+    res.status(200).json({ message: "File would be streamed here", fileName: attachment.originalFileName });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
+
+app.delete("/api/attachments/:id", async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const attachmentId = Number(req.params.id);
+    const { requesterId, reason } = req.body;
+
+    if (!reason || reason.trim().length < 3) {
+      return res.status(422).json({
+        error: { code: "VALIDATION_ERROR", fields: { reason: "Reason is required (min 3 characters)" } },
+      });
+    }
+
+    const attachment = await prisma.attachment.findFirst({
+      where: { id: attachmentId, ticket: { requesterId: Number(requesterId) } },
+    });
+
+    if (!attachment) {
+      return res.status(404).json({ error: { code: "ATTACHMENT_NOT_FOUND" } });
+    }
+    if (attachment.isRemoved) {
+      return res.status(409).json({ error: { code: "ATTACHMENT_ALREADY_REMOVED" } });
+    }
+
+    const updated = await prisma.attachment.update({
+      where: { id: attachmentId },
+      data: { isRemoved: true, removedAt: new Date(), removalReason: reason.trim() },
+    });
+
+    res.status(200).json({ attachment: updated });
   } catch {
     res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
   }
