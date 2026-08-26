@@ -179,3 +179,99 @@ app.post("/api/tickets", upload.array("attachments", 5), async (req: Request, re
     res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
   }
 });
+
+app.get("/api/tickets/:id", async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const ticketId = Number(req.params.id);
+    const requesterId = Number(req.query.requesterId);
+
+    if (!requesterId) {
+      return res.status(400).json({ error: { code: "MISSING_REQUESTER_ID" } });
+    }
+
+    const ticket = await prisma.ticket.findFirst({
+      where: { id: ticketId, requesterId },
+      include: {
+        category: { select: { name: true } },
+        relatedSystem: { select: { name: true } },
+        attachments: {
+          select: {
+            id: true,
+            originalFileName: true,
+            sizeBytes: true,
+            uploadedAt: true,
+            isRemoved: true,
+            removedAt: true,
+            removalReason: true,
+          },
+        },
+      },
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "TICKET_NOT_FOUND" } });
+    }
+
+    res.status(200).json({ ticket });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
+
+app.get("/api/attachments/:id/download", async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const attachmentId = Number(req.params.id);
+    const requesterId = Number(req.query.requesterId);
+
+    const attachment = await prisma.attachment.findFirst({
+      where: { id: attachmentId, ticket: { requesterId } },
+    });
+
+    if (!attachment) {
+      return res.status(404).json({ error: { code: "ATTACHMENT_NOT_FOUND" } });
+    }
+    if (attachment.isRemoved) {
+      return res.status(410).json({ error: { code: "ATTACHMENT_REMOVED" } });
+    }
+
+    res.status(200).json({ message: "File would be streamed here", fileName: attachment.originalFileName });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
+
+app.delete("/api/attachments/:id", async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const attachmentId = Number(req.params.id);
+    const { requesterId, reason } = req.body;
+
+    if (!reason || reason.trim().length < 3) {
+      return res.status(422).json({
+        error: { code: "VALIDATION_ERROR", fields: { reason: "Reason is required (min 3 characters)" } },
+      });
+    }
+
+    const attachment = await prisma.attachment.findFirst({
+      where: { id: attachmentId, ticket: { requesterId: Number(requesterId) } },
+    });
+
+    if (!attachment) {
+      return res.status(404).json({ error: { code: "ATTACHMENT_NOT_FOUND" } });
+    }
+    if (attachment.isRemoved) {
+      return res.status(409).json({ error: { code: "ATTACHMENT_ALREADY_REMOVED" } });
+    }
+
+    const updated = await prisma.attachment.update({
+      where: { id: attachmentId },
+      data: { isRemoved: true, removedAt: new Date(), removalReason: reason.trim() },
+    });
+
+    res.status(200).json({ attachment: updated });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});

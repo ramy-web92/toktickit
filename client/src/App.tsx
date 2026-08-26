@@ -3,13 +3,15 @@ import { checkSystem, Category, DevRequester } from "./api.js";
 import RequesterSelector from "./RequesterSelector.js";
 import CreateTicket from "./CreateTicket.js";
 import MyTickets from "./MyTickets.js";
+import TicketDetail from "./TicketDetail.js";
 
 type UiState = "idle" | "loading" | "success" | "error";
-type View = "home" | "create-ticket" | "my-tickets";
+type View = "home" | "create-ticket" | "my-tickets" | "ticket-detail";
 
 export default function App() {
   const [selectedRequester, setSelectedRequester] = useState<DevRequester | null>(null);
   const [view, setView] = useState<View>("home");
+  const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
   const [state, setState] = useState<UiState>("idle");
   const [categories, setCategories] = useState<Category[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
@@ -33,6 +35,11 @@ export default function App() {
       setErrorMessage("Unable to connect to TokTickIT API");
       setState("error");
     }
+  }
+
+  function handleOpenTicket(ticketId: number) {
+    setSelectedTicketId(ticketId);
+    setView("ticket-detail");
   }
 
   if (!selectedRequester) {
@@ -64,7 +71,9 @@ export default function App() {
           Home
         </button>
         <button
-          className={`btn btn-sm me-2 ${view === "my-tickets" ? "btn-success" : "btn-outline-success"}`}
+          className={`btn btn-sm me-2 ${
+            view === "my-tickets" || view === "ticket-detail" ? "btn-success" : "btn-outline-success"
+          }`}
           onClick={() => setView("my-tickets")}
         >
           My Tickets
@@ -111,7 +120,19 @@ export default function App() {
       )}
 
       {view === "my-tickets" && (
-        <MyTickets requester={selectedRequester} categories={categories} />
+        <MyTickets
+          requester={selectedRequester}
+          categories={categories}
+          onOpenTicket={handleOpenTicket}
+        />
+      )}
+
+      {view === "ticket-detail" && selectedTicketId && (
+        <TicketDetail
+          ticketId={selectedTicketId}
+          requester={selectedRequester}
+          onBack={() => setView("my-tickets")}
+        />
       )}
     </div>
   );
