@@ -28,7 +28,7 @@
 
 &#x20; specification.md Section 11.
 
-\- \*\*Status\*\*: ✅ Approved
+\- \*\*Status\*\*:  Approved
 
 
 
@@ -46,7 +46,7 @@
 
 &#x20; seed data, but noted for a future cleanup."
 
-\- \*\*Status\*\*: ✅ Approved
+\- \*\*Status\*\*: Approved
 
 
 
@@ -58,7 +58,7 @@
 
 \- \*\*My response\*\*: "Thank you for your feedback."
 
-\- \*\*Status\*\*: ✅ Approved
+\- \*\*Status\*\*: Approved
 
 
 
@@ -66,23 +66,37 @@
 
 \- \*\*Link\*\*: https://github.com/ramy-web92/toktickit/pull/18
 
-\- \*\*Comment received\*\*: "Nice, the empty vs no-results distinction works well! One thing: the 
+\- \*\*Comment received\*\*: "Nice, the empty vs no-results distinction works well! One thing: the
 
-&#x20; hasEverHadTickets state feels a bit fragile since it's only updated when there are no active 
+&#x20; hasEverHadTickets state feels a bit fragile since it's only updated when there are no active
 
-&#x20; filters — if a requester has tickets but you load the page with a filter already applied 
+&#x20; filters — if a requester has tickets but you load the page with a filter already applied
 
 &#x20; somehow, could show the wrong message. Not urgent, just flagging."
 
-\- \*\*My response\*\*: "Good catch, that's a fair edge case. For Lab 2 there's no way to arrive with 
+\- \*\*My response\*\*: "Good catch, that's a fair edge case. For Lab 2 there's no way to arrive with
 
-&#x20; a pre-applied filter (filters always start empty on mount), so it doesn't trigger in practice, 
+&#x20; a pre-applied filter (filters always start empty on mount), so it doesn't trigger in practice,
 
 &#x20; but I'll keep it in mind if we add URL-based filter persistence later."
 
-\- \*\*Status\*\*: ✅ Approved
+\- \*\*Status\*\*: Approved
 
 
 
+\## PR #19 — feat(lab2): Ticket Detail and attachment management
 
+\- \*\*Link\*\*: https://github.com/ramy-web92/toktickit/pull/19
+
+\- \*\*Comment received\*\*: "Great work on this PR! The ticket detail view and attachment management 
+
+&#x20; are well implemented. Soft delete works correctly and tests are passing. Small UX suggestions: 
+
+&#x20; maybe add a loading spinner during upload and a confirmation before soft delete. Overall, code 
+
+&#x20; is clean and ready to merge. Approved"
+
+\- \*\*My response\*\*: "Thanks for the review! I'll keep the UX suggestions in mind for future improvements. Merging now."
+
+\- \*\*Status\*\*:  Approved
 
