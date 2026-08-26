@@ -17,11 +17,11 @@ type UiState = "loading" | "success" | "error";
 interface Props {
   requester: DevRequester;
   categories: Category[];
+  onOpenTicket: (ticketId: number) => void;
 }
-
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
-export default function MyTickets({ requester, categories }: Props) {
+export default function MyTickets({ requester, categories, onOpenTicket }: Props) {
   const [state, setState] = useState<UiState>("loading");
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [totalItems, setTotalItems] = useState(0);
@@ -160,7 +160,7 @@ export default function MyTickets({ requester, categories }: Props) {
             </thead>
             <tbody>
               {tickets.map((t) => (
-                <tr key={t.id}>
+                  <tr key={t.id} onClick={() => onOpenTicket(t.id)} style={{ cursor: "pointer" }}>
                   <td>{t.ticketNumber}</td>
                   <td>{t.summary}</td>
                   <td>{t.category.name}</td>
