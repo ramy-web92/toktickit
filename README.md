@@ -46,3 +46,20 @@ npm test
 cd client
 npm test
 ```
+## Lab 2 Features (Requester Ticketing MVP)
+
+-  Development Requester selector (fake login)
+-  Create Ticket (form with validation)
+-  My Tickets (list with search/filter/sort/pagination)
+-  Ticket Detail (read-only + attachments management)
+-  Attachment upload, download, soft removal
+
+## Lab 2 Documentation
+
+All specification and documentation files are located in `docs/lab-02/`:
+- `specification.md` – BR, FR, AC, data model
+- `api-spec.md` – REST API endpoints
+- `ui-spec.md` – UI specifications and screenshots
+- `tests.md` – Test plan with traceability
+- `ai-use.md` – AI usage log
+- `reviewer.md` – Peer review log
