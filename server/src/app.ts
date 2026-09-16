@@ -1,16 +1,177 @@
-import express, { Request, Response } from "express";
+import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
+import session from "express-session";
+import bcrypt from "bcryptjs";
 import { getPrisma } from "./prisma.js";
 import multer from "multer";
 
 export const app = express();
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "insecure-fallback-secret",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 1000 * 60 * 60 * 8, // 8 hours
+    },
+  })
+);
+
+// Extend Express's session type to carry our authenticated user id.
+declare module "express-session" {
+  interface SessionData {
+    userId?: number;
+    role?: "REQUESTER" | "IT_STAFF" | "ADMINISTRATOR";
+  }
+}
+
+// --- Auth middleware ---
+function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.userId) {
+    return res.status(401).json({ error: { code: "UNAUTHENTICATED", message: "Please sign in to continue." } });
+  }
+  next();
+}
+
+function requireRole(...roles: Array<"REQUESTER" | "IT_STAFF" | "ADMINISTRATOR">) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (!req.session.userId || !req.session.role || !roles.includes(req.session.role)) {
+      return res.status(403).json({ error: { code: "FORBIDDEN", message: "You do not have permission to perform this action." } });
+    }
+    next();
+  };
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
 });
+
+// --- Authentication routes ---
+
+app.post("/api/auth/login", async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Email and password are required." } });
+  }
+
+  try {
+    const prisma = getPrisma();
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    // Same generic error whether the email doesn't exist, password is
+    // wrong, or the account is inactive — do not help attackers enumerate
+    // accounts (BR-06, BR-07).
+    const genericError = () =>
+      res.status(401).json({ error: { code: "INVALID_CREDENTIALS", message: "Invalid email or password." } });
+
+    if (!user || !user.isActive) {
+      return genericError();
+    }
+
+    const passwordMatches = await bcrypt.compare(password, user.passwordHash);
+    if (!passwordMatches) {
+      return genericError();
+    }
+
+    req.session.userId = user.id;
+    req.session.role = user.role;
+
+    res.status(200).json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      mustChangePassword: user.mustChangePassword,
+    });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
+
+app.post("/api/auth/logout", (req: Request, res: Response) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+    }
+    res.clearCookie("connect.sid");
+    res.status(200).json({ success: true });
+  });
+});
+
+app.get("/api/auth/me", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const user = await prisma.user.findUnique({ where: { id: req.session.userId! } });
+
+    if (!user || !user.isActive) {
+      req.session.destroy(() => {});
+      return res.status(401).json({ error: { code: "UNAUTHENTICATED" } });
+    }
+
+    res.status(200).json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      mustChangePassword: user.mustChangePassword,
+    });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
+
+app.post("/api/auth/change-password", requireAuth, async (req: Request, res: Response) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Current and new password are required." } });
+  }
+
+  const strongEnough =
+    newPassword.length >= 8 &&
+    /[a-z]/.test(newPassword) &&
+    /[A-Z]/.test(newPassword) &&
+    /[0-9]/.test(newPassword) &&
+    /[^A-Za-z0-9]/.test(newPassword);
+
+  if (!strongEnough) {
+    return res.status(400).json({
+      error: {
+        code: "WEAK_PASSWORD",
+        message: "Password must be at least 8 characters and include upper/lower case, a number, and a special character.",
+      },
+    });
+  }
+
+  try {
+    const prisma = getPrisma();
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: req.session.userId! } });
+
+    const currentMatches = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!currentMatches) {
+      return res.status(400).json({ error: { code: "INVALID_CURRENT_PASSWORD", message: "Current password is incorrect." } });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: newHash, mustChangePassword: false },
+    });
+
+    res.status(200).json({ success: true });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
+
 
 app.get("/api/health", (_req: Request, res: Response) => {
   res.status(200).json({ status: "ok", service: "TokTickIT API" });
@@ -56,14 +217,12 @@ app.get("/api/related-systems", async (_req: Request, res: Response) => {
   }
 });
 
-app.get("/api/tickets", async (req: Request, res: Response) => {
+app.get("/api/tickets", requireAuth, requireRole("REQUESTER"), async (req: Request, res: Response) => {
   try {
     const prisma = getPrisma();
-    const requesterId = Number(req.query.requesterId);
+    const requesterId = req.session.userId!;
 
-    if (!requesterId) {
-      return res.status(400).json({ error: { code: "MISSING_REQUESTER_ID" } });
-    }
+
 
     const page = Math.max(1, Number(req.query.page) || 1);
     const allowedPageSizes = [10, 25, 50];
@@ -116,8 +275,9 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
   }
 });
 
-app.post("/api/tickets", upload.array("attachments", 5), async (req: Request, res: Response) => {
-  const { requesterId, categoryId, relatedSystemId, summary, description, requestedPriority } = req.body;
+app.post("/api/tickets", requireAuth, requireRole("REQUESTER"), upload.array("attachments", 5), async (req: Request, res: Response) => {
+  const requesterId = req.session.userId!;
+  const { categoryId, relatedSystemId, summary, description, requestedPriority } = req.body;
 
   const errors: Record<string, string> = {};
   if (!summary || summary.trim().length < 5 || summary.trim().length > 120) {
@@ -142,8 +302,9 @@ app.post("/api/tickets", upload.array("attachments", 5), async (req: Request, re
     const ticket = await prisma.ticket.create({
       data: {
         ticketNumber,
-        requesterId: Number(requesterId),
+        requesterId, 
         categoryId: Number(categoryId),
+
         relatedSystemId: Number(relatedSystemId),
         summary: summary.trim(),
         description: description.trim(),
@@ -180,15 +341,11 @@ app.post("/api/tickets", upload.array("attachments", 5), async (req: Request, re
   }
 });
 
-app.get("/api/tickets/:id", async (req: Request, res: Response) => {
+app.get("/api/tickets/:id", requireAuth, requireRole("REQUESTER"), async (req: Request, res: Response) => {
   try {
     const prisma = getPrisma();
     const ticketId = Number(req.params.id);
-    const requesterId = Number(req.query.requesterId);
-
-    if (!requesterId) {
-      return res.status(400).json({ error: { code: "MISSING_REQUESTER_ID" } });
-    }
+    const requesterId = req.session.userId!;
 
     const ticket = await prisma.ticket.findFirst({
       where: { id: ticketId, requesterId },
@@ -219,11 +376,11 @@ app.get("/api/tickets/:id", async (req: Request, res: Response) => {
   }
 });
 
-app.get("/api/attachments/:id/download", async (req: Request, res: Response) => {
+app.get("/api/attachments/:id/download", requireAuth, requireRole("REQUESTER"), async (req: Request, res: Response) => {
   try {
     const prisma = getPrisma();
     const attachmentId = Number(req.params.id);
-    const requesterId = Number(req.query.requesterId);
+    const requesterId = req.session.userId!;
 
     const attachment = await prisma.attachment.findFirst({
       where: { id: attachmentId, ticket: { requesterId } },
@@ -242,11 +399,12 @@ app.get("/api/attachments/:id/download", async (req: Request, res: Response) => 
   }
 });
 
-app.delete("/api/attachments/:id", async (req: Request, res: Response) => {
+app.delete("/api/attachments/:id", requireAuth, requireRole("REQUESTER"), async (req: Request, res: Response) => {
   try {
     const prisma = getPrisma();
     const attachmentId = Number(req.params.id);
-    const { requesterId, reason } = req.body;
+    const requesterId = req.session.userId!;
+    const { reason } = req.body;
 
     if (!reason || reason.trim().length < 3) {
       return res.status(422).json({
@@ -254,8 +412,8 @@ app.delete("/api/attachments/:id", async (req: Request, res: Response) => {
       });
     }
 
-    const attachment = await prisma.attachment.findFirst({
-      where: { id: attachmentId, ticket: { requesterId: Number(requesterId) } },
+        const attachment = await prisma.attachment.findFirst({
+      where: { id: attachmentId, ticket: { requesterId } },
     });
 
     if (!attachment) {
