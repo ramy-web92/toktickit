@@ -17,3 +17,9 @@ server/prisma/*.db
 cookies.txt
 cookies_staff.txt
 note.json
+newuser.json
+dupuser.json
+selfdeactivate.json
+demote.json
+resetpass.json
+cookies_admin.txt
