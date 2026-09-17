@@ -433,3 +433,317 @@ app.delete("/api/attachments/:id", requireAuth, requireRole("REQUESTER"), async 
     res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
   }
 });
+
+// --- IT Staff Ticket Queue & Ticket operations ---
+
+const ALLOWED_SORT_FIELDS = ["createdAt", "requestedPriority", "itPriority", "currentStatus"] as const;
+
+// BR-13: permitted status transitions per role.
+const STATUS_TRANSITIONS: Record<string, string[]> = {
+  NEW: ["OPEN", "CANCELLED"],
+  OPEN: ["IN_PROGRESS", "WAITING_FOR_REQUESTER", "CANCELLED"],
+  IN_PROGRESS: ["WAITING_FOR_REQUESTER", "RESOLVED", "CANCELLED"],
+  WAITING_FOR_REQUESTER: ["IN_PROGRESS", "RESOLVED", "CANCELLED"],
+  RESOLVED: ["CLOSED", "REOPENED"],
+  CLOSED: ["REOPENED"],
+  REOPENED: ["OPEN", "IN_PROGRESS", "CANCELLED"],
+  CANCELLED: [],
+};
+
+app.get("/api/staff/tickets", requireAuth, requireRole("IT_STAFF", "ADMINISTRATOR"), async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const allowedPageSizes = [10, 25, 50];
+    const pageSize = allowedPageSizes.includes(Number(req.query.pageSize))
+      ? Number(req.query.pageSize)
+      : 10;
+
+    const search = (req.query.search as string) || "";
+    const status = req.query.status as string | undefined;
+    const category = req.query.category as string | undefined;
+    const owner = req.query.owner as string | undefined;
+
+    const sortByRaw = req.query.sortBy as string | undefined;
+    const sortBy = ALLOWED_SORT_FIELDS.includes(sortByRaw as any)
+      ? (sortByRaw as typeof ALLOWED_SORT_FIELDS[number])
+      : "createdAt";
+    const sortDir = req.query.sortDir === "asc" ? "asc" : "desc";
+
+    const where: any = {};
+    if (search) {
+      where.OR = [
+        { ticketNumber: { contains: search, mode: "insensitive" } },
+        { summary: { contains: search, mode: "insensitive" } },
+      ];
+    }
+    if (status) where.currentStatus = status;
+    if (category) where.category = { name: category };
+
+    if (owner === "unassigned") {
+      where.ownerId = null;
+    } else if (owner === "me") {
+      where.ownerId = req.session.userId;
+    } else if (owner && !isNaN(Number(owner))) {
+      where.ownerId = Number(owner);
+    }
+
+    const [tickets, totalItems] = await Promise.all([
+      prisma.ticket.findMany({
+        where,
+        select: {
+          id: true,
+          ticketNumber: true,
+          createdAt: true,
+          summary: true,
+          requestedPriority: true,
+          itPriority: true,
+          currentStatus: true,
+          updatedAt: true,
+          category: { select: { name: true } },
+          owner: { select: { id: true, name: true } },
+        },
+        orderBy: { [sortBy]: sortDir },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      prisma.ticket.count({ where }),
+    ]);
+
+    res.status(200).json({
+      data: tickets,
+      pagination: { page, pageSize, totalItems, totalPages: Math.ceil(totalItems / pageSize) },
+    });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
+
+app.get("/api/staff/tickets/:id", requireAuth, requireRole("IT_STAFF", "ADMINISTRATOR"), async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const ticketId = Number(req.params.id);
+
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        category: { select: { name: true } },
+        relatedSystem: { select: { name: true } },
+        requester: { select: { id: true, name: true } },
+        owner: { select: { id: true, name: true } },
+        attachments: {
+          select: { id: true, originalFileName: true, sizeBytes: true, uploadedAt: true, isRemoved: true },
+        },
+      },
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "TICKET_NOT_FOUND" } });
+    }
+
+    res.status(200).json({ ticket });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
+
+app.patch("/api/staff/tickets/:id/owner", requireAuth, requireRole("IT_STAFF", "ADMINISTRATOR"), async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const ticketId = Number(req.params.id);
+    const { ownerId } = req.body;
+
+    const newOwner = await prisma.user.findUnique({ where: { id: Number(ownerId) } });
+    if (!newOwner || !newOwner.isActive || !["IT_STAFF", "ADMINISTRATOR"].includes(newOwner.role)) {
+      return res.status(400).json({ error: { code: "INVALID_OWNER", message: "Owner must be an active IT Staff or Administrator." } });
+    }
+
+    const ticket = await prisma.ticket.update({
+      where: { id: ticketId },
+      data: { ownerId: newOwner.id },
+    });
+
+    res.status(200).json({ ticket });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
+
+app.patch("/api/staff/tickets/:id/priority", requireAuth, requireRole("IT_STAFF", "ADMINISTRATOR"), async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const ticketId = Number(req.params.id);
+    const { itPriority } = req.body;
+
+    if (!["LOW", "MEDIUM", "HIGH"].includes(itPriority)) {
+      return res.status(400).json({ error: { code: "INVALID_PRIORITY" } });
+    }
+
+    const ticket = await prisma.ticket.update({
+      where: { id: ticketId },
+      data: { itPriority },
+    });
+
+    res.status(200).json({ ticket });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
+
+app.patch("/api/staff/tickets/:id/status", requireAuth, requireRole("IT_STAFF", "ADMINISTRATOR"), async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const ticketId = Number(req.params.id);
+    const { status: newStatus } = req.body;
+
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "TICKET_NOT_FOUND" } });
+    }
+
+    const allowedNextStatuses = STATUS_TRANSITIONS[ticket.currentStatus] || [];
+    if (!allowedNextStatuses.includes(newStatus)) {
+      return res.status(409).json({
+        error: { code: "INVALID_TRANSITION", message: `Cannot move from ${ticket.currentStatus} to ${newStatus}.` },
+      });
+    }
+
+    const updated = await prisma.ticket.update({
+      where: { id: ticketId },
+      data: { currentStatus: newStatus },
+    });
+
+    res.status(200).json({ ticket: updated });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
+
+// --- Public Comments (Requester who owns the ticket, or IT Staff/Administrator) ---
+
+app.get("/api/tickets/:id/comments", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const ticketId = Number(req.params.id);
+    const { userId, role } = req.session;
+
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "TICKET_NOT_FOUND" } });
+    }
+    if (role === "REQUESTER" && ticket.requesterId !== userId) {
+      return res.status(403).json({ error: { code: "FORBIDDEN" } });
+    }
+
+    const comments = await prisma.publicComment.findMany({
+      where: { ticketId },
+      include: { author: { select: { name: true, role: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+
+    res.status(200).json({ comments });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
+
+app.post("/api/tickets/:id/comments", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const ticketId = Number(req.params.id);
+    const { content } = req.body;
+    const { userId, role } = req.session;
+
+    if (!content || content.trim().length === 0) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Comment cannot be empty." } });
+    }
+    if (content.length > 2000) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Comment too long (max 2000 characters)." } });
+    }
+
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "TICKET_NOT_FOUND" } });
+    }
+    if (role === "REQUESTER" && ticket.requesterId !== userId) {
+      return res.status(403).json({ error: { code: "FORBIDDEN" } });
+    }
+
+    const comment = await prisma.publicComment.create({
+      data: { ticketId, authorId: userId!, content: content.trim() },
+      include: { author: { select: { name: true, role: true } } },
+    });
+
+    res.status(201).json({ comment });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
+
+// --- Internal Notes (IT Staff / Administrator only) ---
+
+app.get("/api/tickets/:id/notes", requireAuth, requireRole("IT_STAFF", "ADMINISTRATOR"), async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const ticketId = Number(req.params.id);
+
+    const notes = await prisma.internalNote.findMany({
+      where: { ticketId },
+      include: { author: { select: { name: true, role: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+
+    res.status(200).json({ notes });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
+
+app.post("/api/tickets/:id/notes", requireAuth, requireRole("IT_STAFF", "ADMINISTRATOR"), async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const ticketId = Number(req.params.id);
+    const { content } = req.body;
+
+    if (!content || content.trim().length === 0) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Note cannot be empty." } });
+    }
+    if (content.length > 2000) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Note too long (max 2000 characters)." } });
+    }
+
+    const note = await prisma.internalNote.create({
+      data: { ticketId, authorId: req.session.userId!, content: content.trim() },
+      include: { author: { select: { name: true, role: true } } },
+    });
+
+    res.status(201).json({ note });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
+
+// --- Requester: mark problem as appearing resolved (BR-05, does not change formal status) ---
+
+app.post("/api/tickets/:id/resolved-by-requester", requireAuth, requireRole("REQUESTER"), async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const ticketId = Number(req.params.id);
+    const requesterId = req.session.userId!;
+
+    const ticket = await prisma.ticket.findFirst({ where: { id: ticketId, requesterId } });
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "TICKET_NOT_FOUND" } });
+    }
+
+    const updated = await prisma.ticket.update({
+      where: { id: ticketId },
+      data: { requesterMarkedResolved: true },
+    });
+
+    res.status(200).json({ ticket: updated });
+  } catch {
+    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
+  }
+});
