@@ -88,8 +88,9 @@ export async function createTicket(input: CreateTicketInput): Promise<CreateTick
   formData.append("requestedPriority", input.requestedPriority);
   input.attachments.forEach((file) => formData.append("attachments", file));
 
-  const res = await fetch(`${API_URL}/api/tickets`, {
+    const res = await fetch(`${API_URL}/api/tickets`, {
     method: "POST",
+    credentials: "include",
     body: formData,
   });
 
@@ -98,4 +99,57 @@ export async function createTicket(input: CreateTicketInput): Promise<CreateTick
     throw { status: res.status, ...data };
   }
   return data;
+}
+
+export interface AuthUser {
+  id: number;
+  name: string;
+  email: string;
+  role: "REQUESTER" | "IT_STAFF" | "ADMINISTRATOR";
+  mustChangePassword: boolean;
+}
+
+export async function login(email: string, password: string): Promise<AuthUser> {
+  const res = await fetch(`${API_URL}/api/auth/login`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw { status: res.status, ...data };
+  }
+  return data;
+}
+
+export async function logout(): Promise<void> {
+  await fetch(`${API_URL}/api/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  });
+}
+
+export async function getCurrentUser(): Promise<AuthUser> {
+  const res = await fetch(`${API_URL}/api/auth/me`, {
+    credentials: "include",
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw { status: res.status, ...data };
+  }
+  return data;
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/auth/change-password`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw { status: res.status, ...data };
+  }
 }
