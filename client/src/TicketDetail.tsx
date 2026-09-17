@@ -48,7 +48,9 @@ export default function TicketDetail({ ticketId, requester, onBack }: Props) {
   async function loadTicket() {
     setState("loading");
     try {
-      const res = await fetch(`${API_URL}/api/tickets/${ticketId}?requesterId=${requester.id}`);
+            const res = await fetch(`${API_URL}/api/tickets/${ticketId}`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
       setTicket(data.ticket);
@@ -61,10 +63,11 @@ export default function TicketDetail({ ticketId, requester, onBack }: Props) {
   async function handleRemove(attachmentId: number) {
     if (removalReason.trim().length < 3) return;
     try {
-      const res = await fetch(`${API_URL}/api/attachments/${attachmentId}`, {
+            const res = await fetch(`${API_URL}/api/attachments/${attachmentId}`, {
         method: "DELETE",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requesterId: requester.id, reason: removalReason.trim() }),
+        body: JSON.stringify({ reason: removalReason.trim() }),
       });
       if (res.ok) {
         setRemovingId(null);

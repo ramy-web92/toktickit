@@ -39,14 +39,15 @@ export default function MyTickets({ requester, categories, onOpenTicket }: Props
     setState("loading");
     try {
       const params = new URLSearchParams({
-        requesterId: String(requester.id),
         page: String(page),
       });
       if (search) params.set("search", search);
       if (categoryId) params.set("categoryId", categoryId);
       if (requestedPriority) params.set("requestedPriority", requestedPriority);
 
-      const res = await fetch(`${API_URL}/api/tickets?${params.toString()}`);
+          const res = await fetch(`${API_URL}/api/tickets?${params.toString()}`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
       setTickets(data.tickets);

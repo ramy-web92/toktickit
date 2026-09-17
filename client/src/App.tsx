@@ -1,40 +1,49 @@
 import { useState, useEffect } from "react";
-import { checkSystem, Category, DevRequester } from "./api.js";
-import RequesterSelector from "./RequesterSelector.js";
+import { Category, AuthUser, getCurrentUser, logout } from "./api.js";
+import Login from "./Login.js";
+import ChangePassword from "./ChangePassword.js";
 import CreateTicket from "./CreateTicket.js";
 import MyTickets from "./MyTickets.js";
 import TicketDetail from "./TicketDetail.js";
 
-type UiState = "idle" | "loading" | "success" | "error";
 type View = "home" | "create-ticket" | "my-tickets" | "ticket-detail";
+type AuthState = "loading" | "unauthenticated" | "must-change-password" | "authenticated";
 
 export default function App() {
-  const [selectedRequester, setSelectedRequester] = useState<DevRequester | null>(null);
+  const [authState, setAuthState] = useState<AuthState>("loading");
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [view, setView] = useState<View>("home");
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
-  const [state, setState] = useState<UiState>("idle");
   const [categories, setCategories] = useState<Category[]>([]);
-  const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    if (selectedRequester) {
+    getCurrentUser()
+      .then((user) => {
+        setCurrentUser(user);
+        setAuthState(user.mustChangePassword ? "must-change-password" : "authenticated");
+      })
+      .catch(() => setAuthState("unauthenticated"));
+  }, []);
+
+  useEffect(() => {
+    if (authState === "authenticated") {
       fetch(`${import.meta.env.VITE_API_URL ?? "http://localhost:3000"}/api/categories`)
         .then((res) => res.json())
         .then(setCategories)
         .catch(() => {});
     }
-  }, [selectedRequester]);
+  }, [authState]);
 
-  async function handleCheck() {
-    setState("loading");
-    try {
-      const result = await checkSystem();
-      setCategories(result.categories);
-      setState("success");
-    } catch {
-      setErrorMessage("Unable to connect to TokTickIT API");
-      setState("error");
-    }
+  function handleLoginSuccess(user: AuthUser) {
+    setCurrentUser(user);
+    setAuthState(user.mustChangePassword ? "must-change-password" : "authenticated");
+  }
+
+  async function handleLogout() {
+    await logout();
+    setCurrentUser(null);
+    setAuthState("unauthenticated");
+    setView("home");
   }
 
   function handleOpenTicket(ticketId: number) {
@@ -42,9 +51,30 @@ export default function App() {
     setView("ticket-detail");
   }
 
-  if (!selectedRequester) {
-    return <RequesterSelector onSelect={setSelectedRequester} />;
+  if (authState === "loading") {
+    return (
+      <div className="container py-5 text-center">
+        <p className="text-muted">Loading…</p>
+      </div>
+    );
   }
+
+  if (authState === "unauthenticated") {
+    return <Login onSuccess={handleLoginSuccess} />;
+  }
+
+  if (authState === "must-change-password") {
+    return (
+      <ChangePassword
+        onSuccess={() => setAuthState("authenticated")}
+      />
+    );
+  }
+
+  // authState === "authenticated" — currentUser is guaranteed non-null here.
+  const user = currentUser!;
+  // Existing Lab 2 components expect a "requester"-shaped object.
+  const requesterCompat = { id: user.id, name: user.name, email: user.email };
 
   return (
     <div className="container py-5" style={{ maxWidth: 900 }}>
@@ -53,86 +83,70 @@ export default function App() {
           TokTickIT <span className="text-success">IT Service Desk</span>
         </h1>
         <div className="text-end">
-          <div className="small text-muted">Requester: {selectedRequester.name}</div>
-          <button
-            className="btn btn-link btn-sm p-0"
-            onClick={() => setSelectedRequester(null)}
-          >
-            Change Requester
+          <div className="small text-muted">
+            {user.name} · <span className="badge bg-secondary">{user.role}</span>
+          </div>
+          <button className="btn btn-link btn-sm p-0" onClick={handleLogout}>
+            Logout
           </button>
         </div>
       </div>
 
-      <div className="mb-4">
-        <button
-          className={`btn btn-sm me-2 ${view === "home" ? "btn-success" : "btn-outline-success"}`}
-          onClick={() => setView("home")}
-        >
-          Home
-        </button>
-        <button
-          className={`btn btn-sm me-2 ${
-            view === "my-tickets" || view === "ticket-detail" ? "btn-success" : "btn-outline-success"
-          }`}
-          onClick={() => setView("my-tickets")}
-        >
-          My Tickets
-        </button>
-        <button
-          className={`btn btn-sm ${view === "create-ticket" ? "btn-success" : "btn-outline-success"}`}
-          onClick={() => setView("create-ticket")}
-        >
-          Create Ticket
-        </button>
-      </div>
-
-      {view === "home" && (
+      {user.role === "REQUESTER" && (
         <>
-          <button className="btn btn-success" onClick={handleCheck} disabled={state === "loading"}>
-            {state === "loading" ? "Loading…" : "Check System"}
-          </button>
-          {state === "success" && (
-            <div className="mt-3">
-              <p>System Status: <strong>Online</strong></p>
-              <p>Supported Request Categories:</p>
-              <ul>
-                {categories.map((c) => (
-                  <li key={c.id}>{c.name}</li>
-                ))}
-              </ul>
-            </div>
+          <div className="mb-4">
+            <button
+              className={`btn btn-sm me-2 ${
+                view === "my-tickets" || view === "ticket-detail" ? "btn-success" : "btn-outline-success"
+              }`}
+              onClick={() => setView("my-tickets")}
+            >
+              My Tickets
+            </button>
+            <button
+              className={`btn btn-sm ${view === "create-ticket" ? "btn-success" : "btn-outline-success"}`}
+              onClick={() => setView("create-ticket")}
+            >
+              Create Ticket
+            </button>
+          </div>
+
+          {view === "create-ticket" && (
+            <CreateTicket
+              requester={requesterCompat}
+              categories={categories}
+              onCreated={() => setView("my-tickets")}
+            />
           )}
-          {state === "error" && (
-            <p className="mt-3 text-danger">
-              System Status: <strong>Offline</strong><br />
-              {errorMessage}
-            </p>
+
+          {(view === "my-tickets" || view === "home") && (
+            <MyTickets
+              requester={requesterCompat}
+              categories={categories}
+              onOpenTicket={handleOpenTicket}
+            />
+          )}
+
+          {view === "ticket-detail" && selectedTicketId && (
+            <TicketDetail
+              ticketId={selectedTicketId}
+              requester={requesterCompat}
+              onBack={() => setView("my-tickets")}
+            />
           )}
         </>
       )}
 
-      {view === "create-ticket" && (
-        <CreateTicket
-          requester={selectedRequester}
-          categories={categories}
-          onCreated={() => setView("my-tickets")}
-        />
+      {user.role === "IT_STAFF" && (
+        <div className="alert alert-info">
+          IT Staff Ticket Queue UI coming soon.
+        </div>
       )}
 
-      {view === "my-tickets" && (
-        <MyTickets
-          requester={selectedRequester}
-          categories={categories}
-          onOpenTicket={handleOpenTicket}
-        />
-      )}
-
-      {view === "ticket-detail" && selectedTicketId && (
-        <TicketDetail
-          ticketId={selectedTicketId}
-          requester={selectedRequester}
-          onBack={() => setView("my-tickets")}
-        />
+      {user.role === "ADMINISTRATOR" && (
+        <div className="alert alert-info">
+          Administrator User Management UI coming soon.
+        </div>
       )}
     </div>
   );
