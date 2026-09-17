@@ -16,3 +16,4 @@ server/prisma/*.db
 # local test artifacts
 cookies.txt
 cookies_staff.txt
+note.json
