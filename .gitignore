@@ -1,4 +1,4 @@
-# dependencies
+﻿# dependencies
 node_modules/
 # env & secrets
 .env
@@ -13,4 +13,6 @@ server/prisma/*.db
 *.log
 .DS_Store
 .vscode/
-client/docs/
+# local test artifacts
+cookies.txt
+cookies_staff.txt
