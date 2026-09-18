@@ -316,3 +316,68 @@ export async function postInternalNote(ticketId: number, content: string): Promi
   if (!res.ok) throw { status: res.status, ...data };
   return data.note;
 }
+
+export interface AdminUserRow {
+  id: number;
+  name: string;
+  email: string;
+  role: "REQUESTER" | "IT_STAFF" | "ADMINISTRATOR";
+  isActive: boolean;
+}
+
+export async function getAdminUsers(params: { search?: string; role?: string }): Promise<AdminUserRow[]> {
+  const query = new URLSearchParams();
+  if (params.search) query.set("search", params.search);
+  if (params.role) query.set("role", params.role);
+
+  const res = await fetch(`${API_URL}/api/admin/users?${query.toString()}`, {
+    credentials: "include",
+  });
+  const data = await res.json();
+  if (!res.ok) throw { status: res.status, ...data };
+  return data.users;
+}
+
+export async function createAdminUser(input: {
+  name: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+  initialPassword: string;
+}): Promise<AdminUserRow> {
+  const res = await fetch(`${API_URL}/api/admin/users`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = await res.json();
+  if (!res.ok) throw { status: res.status, ...data };
+  return data.user;
+}
+
+export async function updateAdminUser(
+  id: number,
+  input: Partial<{ name: string; email: string; role: string; isActive: boolean }>
+): Promise<AdminUserRow> {
+  const res = await fetch(`${API_URL}/api/admin/users/${id}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = await res.json();
+  if (!res.ok) throw { status: res.status, ...data };
+  return data.user;
+}
+
+export async function resetAdminUserPassword(id: number, newInitialPassword: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/admin/users/${id}/reset-password`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ newInitialPassword }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw { status: res.status, ...data };
+}
