@@ -7,6 +7,7 @@ import MyTickets from "./MyTickets.js";
 import TicketDetail from "./TicketDetail.js";
 import StaffTicketQueue from "./StaffTicketQueue.js";
 import StaffTicketDetail from "./StaffTicketDetail.js";
+import UserManagement from "./UserManagement.js";
 
 type View = "home" | "create-ticket" | "my-tickets" | "ticket-detail" | "staff-queue" | "staff-ticket-detail";
 type AuthState = "loading" | "unauthenticated" | "must-change-password" | "authenticated";
@@ -154,11 +155,7 @@ export default function App() {
         </>
       )}
 
-      {user.role === "ADMINISTRATOR" && (
-        <div className="alert alert-info">
-          Administrator User Management UI coming soon.
-        </div>
-      )}
+            {user.role === "ADMINISTRATOR" && <UserManagement currentUserId={user.id} />}
     </div>
   );
 }
