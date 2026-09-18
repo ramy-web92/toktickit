@@ -5,8 +5,10 @@ import ChangePassword from "./ChangePassword.js";
 import CreateTicket from "./CreateTicket.js";
 import MyTickets from "./MyTickets.js";
 import TicketDetail from "./TicketDetail.js";
+import StaffTicketQueue from "./StaffTicketQueue.js";
+import StaffTicketDetail from "./StaffTicketDetail.js";
 
-type View = "home" | "create-ticket" | "my-tickets" | "ticket-detail";
+type View = "home" | "create-ticket" | "my-tickets" | "ticket-detail" | "staff-queue" | "staff-ticket-detail";
 type AuthState = "loading" | "unauthenticated" | "must-change-password" | "authenticated";
 
 export default function App() {
@@ -46,9 +48,9 @@ export default function App() {
     setView("home");
   }
 
-  function handleOpenTicket(ticketId: number) {
+    function handleOpenTicket(ticketId: number) {
     setSelectedTicketId(ticketId);
-    setView("ticket-detail");
+    setView(currentUser?.role === "IT_STAFF" || currentUser?.role === "ADMINISTRATOR" ? "staff-ticket-detail" : "ticket-detail");
   }
 
   if (authState === "loading") {
@@ -137,10 +139,19 @@ export default function App() {
         </>
       )}
 
-      {user.role === "IT_STAFF" && (
-        <div className="alert alert-info">
-          IT Staff Ticket Queue UI coming soon.
-        </div>
+            {user.role === "IT_STAFF" && (
+        <>
+          {(view === "staff-queue" || view === "home") && (
+            <StaffTicketQueue currentUserId={user.id} onOpenTicket={handleOpenTicket} />
+          )}
+          {view === "staff-ticket-detail" && selectedTicketId && (
+            <StaffTicketDetail
+              ticketId={selectedTicketId}
+              currentUserId={user.id}
+              onBack={() => setView("staff-queue")}
+            />
+          )}
+        </>
       )}
 
       {user.role === "ADMINISTRATOR" && (
