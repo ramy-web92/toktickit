@@ -153,3 +153,42 @@ export async function changePassword(currentPassword: string, newPassword: strin
     throw { status: res.status, ...data };
   }
 }
+
+export interface PublicCommentData {
+  id: number;
+  content: string;
+  createdAt: string;
+  author: { name: string; role: string };
+}
+
+export async function getComments(ticketId: number): Promise<PublicCommentData[]> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/comments`, {
+    credentials: "include",
+  });
+  const data = await res.json();
+  if (!res.ok) throw { status: res.status, ...data };
+  return data.comments;
+}
+
+export async function postComment(ticketId: number, content: string): Promise<PublicCommentData> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/comments`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw { status: res.status, ...data };
+  return data.comment;
+}
+
+export async function markResolvedByRequester(ticketId: number): Promise<void> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/resolved-by-requester`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const data = await res.json();
+    throw { status: res.status, ...data };
+  }
+}
