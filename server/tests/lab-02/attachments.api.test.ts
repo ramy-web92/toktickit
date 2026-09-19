@@ -3,13 +3,14 @@ import request from "supertest";
 import { app } from "../../src/app.js";
 
 describe("Attachment lifecycle", () => {
-  let ticketId: number;
+  const agent = request.agent(app);
   let attachmentId: number;
 
   beforeAll(async () => {
-    const createRes = await request(app)
+    await agent.post("/api/auth/login").send({ email: "jennifer.anderson@example.com", password: "FinalPass456!" });
+
+    const createRes = await agent
       .post("/api/tickets")
-      .field("requesterId", "1")
       .field("categoryId", "1")
       .field("relatedSystemId", "1")
       .field("summary", "Attachment lifecycle test ticket")
@@ -18,16 +19,16 @@ describe("Attachment lifecycle", () => {
       .attach("attachments", Buffer.from("fake image content"), {
         filename: "lifecycle-test.png",
         contentType: "image/png",
-      }); 
-        
-    ticketId = createRes.body.ticket.id;
+      });
+
+    
     attachmentId = createRes.body.attachmentResults[0].attachmentId;
   });
 
   it("soft-removes an attachment with a valid reason", async () => {
-    const res = await request(app)
+    const res = await agent
       .delete(`/api/attachments/${attachmentId}`)
-      .send({ requesterId: 1, reason: "Automated test removal" });
+      .send({ reason: "Automated test removal" });
 
     expect(res.status).toBe(200);
     expect(res.body.attachment.isRemoved).toBe(true);
@@ -35,26 +36,21 @@ describe("Attachment lifecycle", () => {
   });
 
   it("rejects removing an already-removed attachment", async () => {
-    const res = await request(app)
+    const res = await agent
       .delete(`/api/attachments/${attachmentId}`)
-      .send({ requesterId: 1, reason: "Trying again" });
+      .send({ reason: "Trying again" });
 
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe("ATTACHMENT_ALREADY_REMOVED");
   });
 
   it("rejects removal without a reason", async () => {
-    const res = await request(app)
-      .delete(`/api/attachments/${attachmentId}`)
-      .send({ requesterId: 1 });
-
+    const res = await agent.delete(`/api/attachments/${attachmentId}`).send({});
     expect(res.status).toBe(422);
   });
 
   it("blocks download of a removed attachment", async () => {
-    const res = await request(app).get(
-      `/api/attachments/${attachmentId}/download?requesterId=1`
-    );
+    const res = await agent.get(`/api/attachments/${attachmentId}/download`);
     expect(res.status).toBe(410);
     expect(res.body.error.code).toBe("ATTACHMENT_REMOVED");
   });
