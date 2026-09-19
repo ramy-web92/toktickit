@@ -3,9 +3,14 @@ import request from "supertest";
 import { app } from "../../src/app.js";
 
 describe("GET /api/tickets", () => {
-  it("returns only tickets owned by the given requester", async () => {
-    const res1 = await request(app).get("/api/tickets?requesterId=1");
-    const res2 = await request(app).get("/api/tickets?requesterId=2");
+  it("returns only tickets owned by the authenticated requester (BR-03)", async () => {
+    const agent1 = request.agent(app);
+    await agent1.post("/api/auth/login").send({ email: "jennifer.anderson@example.com", password: "FinalPass456!" });
+    const res1 = await agent1.get("/api/tickets");
+
+    const agent2 = request.agent(app);
+    await agent2.post("/api/auth/login").send({ email: "michael.brown@example.com", password: "Password123!" });
+    const res2 = await agent2.get("/api/tickets");
 
     expect(res1.status).toBe(200);
     expect(res2.status).toBe(200);
@@ -17,16 +22,17 @@ describe("GET /api/tickets", () => {
   });
 
   it("filters results by search term with no matches", async () => {
-    const res = await request(app).get(
-      "/api/tickets?requesterId=1&search=zzzznonexistentzzzz"
-    );
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "jennifer.anderson@example.com", password: "FinalPass456!" });
+
+    const res = await agent.get("/api/tickets?search=zzzznonexistentzzzz");
     expect(res.status).toBe(200);
     expect(res.body.tickets).toHaveLength(0);
     expect(res.body.pagination.totalItems).toBe(0);
   });
 
-  it("returns 400 when requesterId is missing", async () => {
+  it("returns 401 when not authenticated", async () => {
     const res = await request(app).get("/api/tickets");
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(401);
   });
 });
