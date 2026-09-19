@@ -11,13 +11,7 @@ datasource db {
 }
 
 // ---------------------------------------------------------------------------
-// Issue 3 — Create and seed IT request categories
-// Define a Category model with:
-//   id        Int      @id @default(autoincrement())
-//   name      String   @unique
-//   createdAt DateTime @default(now())
-// Then run:  npx prisma migrate dev --name init
- model Category {
+model Category {
   id        Int      @id @default(autoincrement())
   name      String   @unique
   createdAt DateTime @default(now())
@@ -32,14 +26,46 @@ model RelatedSystem {
   tickets   Ticket[]
 }
 
+// ---------------------------------------------------------------------------
+// Lab 3 — Real authenticated users, replacing DevRequester.
+// role: which of the 3 permitted roles this user has.
+// isActive: inactive users cannot authenticate (BR-01, BR-07).
+// mustChangePassword: true right after creation or an admin password reset;
+// blocks normal app access until a new password is saved (BR-02).
+enum Role {
+  REQUESTER
+  IT_STAFF
+  ADMINISTRATOR
+}
 
+model User {
+  id                 Int      @id @default(autoincrement())
+  name               String
+  email              String   @unique
+  passwordHash       String
+  role               Role
+  isActive           Boolean  @default(true)
+  mustChangePassword Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  ticketsRequested   Ticket[]        @relation("TicketRequester")
+  ticketsOwned       Ticket[]        @relation("TicketOwner")
+  publicComments     PublicComment[]
+  internalNotes      InternalNote[]
+
+  @@index([role])
+}
+
+// Kept temporarily so the Lab 2 → Lab 3 migration has a documented source
+// table to read from. Removed once the data migration script has run and
+// been verified (see docs/lab-03/specification.md, Section 7).
 model DevRequester {
   id        Int      @id @default(autoincrement())
   name      String
   email     String   @unique
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
-  tickets Ticket[]
 }
 
 enum Priority {
@@ -48,15 +74,28 @@ enum Priority {
   HIGH
 }
 
+// Lab 3 — full workflow statuses (Section 4.5 of the lab sheet).
 enum TicketStatus {
   NEW
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_REQUESTER
+  RESOLVED
+  CLOSED
+  REOPENED
+  CANCELLED
 }
 
 model Ticket {
   id                Int          @id @default(autoincrement())
   ticketNumber      String       @unique
+
   requesterId       Int
-  requester         DevRequester @relation(fields: [requesterId], references: [id])
+  requester         User         @relation("TicketRequester", fields: [requesterId], references: [id])
+
+  ownerId           Int?
+  owner             User?        @relation("TicketOwner", fields: [ownerId], references: [id])
+
   categoryId        Int
   category          Category     @relation(fields: [categoryId], references: [id])
   relatedSystemId   Int
@@ -66,10 +105,19 @@ model Ticket {
   requestedPriority Priority
   itPriority        Priority
   currentStatus     TicketStatus @default(NEW)
+
+  // Set by a Requester (FR-07); does not change currentStatus (BR-05).
+  requesterMarkedResolved Boolean @default(false)
+
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
+
   attachments       Attachment[]
+  publicComments    PublicComment[]
+  internalNotes     InternalNote[]
+
   @@index([requesterId])
+  @@index([ownerId])
   @@index([currentStatus])
 }
 
@@ -85,6 +133,32 @@ model Attachment {
   isRemoved        Boolean   @default(false)
   removedAt        DateTime?
   removalReason    String?
+
+  @@index([ticketId])
+}
+
+// Lab 3 — visible to Requester, IT Staff, Administrator (BR-04). Append-only.
+model PublicComment {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  ticket    Ticket   @relation(fields: [ticketId], references: [id])
+  authorId  Int
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+// Lab 3 — visible only to IT Staff and Administrator (BR-04). Append-only.
+model InternalNote {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  ticket    Ticket   @relation(fields: [ticketId], references: [id])
+  authorId  Int
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
 
   @@index([ticketId])
 }

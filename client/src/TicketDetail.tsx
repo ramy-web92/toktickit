@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { DevRequester } from "./api.js";
+import { DevRequester, PublicCommentData, getComments, postComment, markResolvedByRequester } from "./api.js";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -21,6 +21,7 @@ interface TicketDetailData {
   requestedPriority: string;
   itPriority: string;
   currentStatus: string;
+  requesterMarkedResolved: boolean;
   createdAt: string;
   category: { name: string };
   relatedSystem: { name: string };
@@ -40,15 +41,56 @@ export default function TicketDetail({ ticketId, requester, onBack }: Props) {
   const [ticket, setTicket] = useState<TicketDetailData | null>(null);
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [removalReason, setRemovalReason] = useState("");
+  const [comments, setComments] = useState<PublicCommentData[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [commentState, setCommentState] = useState<"idle" | "submitting" | "error">("idle");
+  const [resolvingState, setResolvingState] = useState<"idle" | "submitting" | "error">("idle");
 
-  useEffect(() => {
+    useEffect(() => {
     loadTicket();
+    loadComments();
   }, [ticketId]);
+
+  async function loadComments() {
+    try {
+      const data = await getComments(ticketId);
+      setComments(data);
+    } catch {
+      // safe no-op — comments section will just stay empty
+    }
+  }
+
+  async function handlePostComment(e: React.FormEvent) {
+    e.preventDefault();
+    if (newComment.trim().length === 0) return;
+    setCommentState("submitting");
+    try {
+      await postComment(ticketId, newComment.trim());
+      setNewComment("");
+      await loadComments();
+      setCommentState("idle");
+    } catch {
+      setCommentState("error");
+    }
+  }
+
+  async function handleMarkResolved() {
+    setResolvingState("submitting");
+    try {
+      await markResolvedByRequester(ticketId);
+      await loadTicket();
+      setResolvingState("idle");
+    } catch {
+      setResolvingState("error");
+    }
+  }
 
   async function loadTicket() {
     setState("loading");
     try {
-      const res = await fetch(`${API_URL}/api/tickets/${ticketId}?requesterId=${requester.id}`);
+            const res = await fetch(`${API_URL}/api/tickets/${ticketId}`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
       setTicket(data.ticket);
@@ -61,10 +103,11 @@ export default function TicketDetail({ ticketId, requester, onBack }: Props) {
   async function handleRemove(attachmentId: number) {
     if (removalReason.trim().length < 3) return;
     try {
-      const res = await fetch(`${API_URL}/api/attachments/${attachmentId}`, {
+            const res = await fetch(`${API_URL}/api/attachments/${attachmentId}`, {
         method: "DELETE",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requesterId: requester.id, reason: removalReason.trim() }),
+        body: JSON.stringify({ reason: removalReason.trim() }),
       });
       if (res.ok) {
         setRemovingId(null);
@@ -133,9 +176,28 @@ export default function TicketDetail({ ticketId, requester, onBack }: Props) {
           <div className="small text-muted">Summary</div>
           <div>{ticket.summary}</div>
         </div>
-        <div>
+                <div className="mb-3">
           <div className="small text-muted">Description</div>
           <div>{ticket.description}</div>
+        </div>
+
+        <div className="border-top pt-3">
+          {ticket.requesterMarkedResolved ? (
+            <span className="badge bg-success-subtle text-success-emphasis">
+              You marked this problem as appearing resolved
+            </span>
+          ) : (
+            <button
+              className="btn btn-outline-success btn-sm"
+              onClick={handleMarkResolved}
+              disabled={resolvingState === "submitting"}
+            >
+              {resolvingState === "submitting" ? "Saving…" : "Problem Appears Resolved"}
+            </button>
+          )}
+          {resolvingState === "error" && (
+            <div className="text-danger small mt-2">Unable to update. Please try again.</div>
+          )}
         </div>
       </div>
 
@@ -191,6 +253,47 @@ export default function TicketDetail({ ticketId, requester, onBack }: Props) {
                 </div>
               )}
             </div>
+          </div>
+        ))}
+            </div>
+
+      <div className="card p-4 mt-4">
+        <h5 className="mb-3">Public Comments</h5>
+
+        <form onSubmit={handlePostComment} className="mb-4">
+          <textarea
+            className="form-control mb-2"
+            rows={2}
+            placeholder="Type your comment here..."
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+          />
+          {commentState === "error" && (
+            <div className="text-danger small mb-2">Unable to post comment. Please try again.</div>
+          )}
+          <button
+            className="btn btn-success btn-sm"
+            type="submit"
+            disabled={commentState === "submitting" || newComment.trim().length === 0}
+          >
+            {commentState === "submitting" ? "Posting…" : "Post Comment"}
+          </button>
+        </form>
+
+        {comments.length === 0 && <p className="text-muted">No comments yet.</p>}
+
+        {comments.map((c) => (
+          <div key={c.id} className="border-bottom py-2">
+            <div className="d-flex justify-content-between">
+              <div>
+                <strong>{c.author.name}</strong>{" "}
+                <span className="badge bg-secondary-subtle text-secondary-emphasis">
+                  {c.author.role}
+                </span>
+              </div>
+              <span className="small text-muted">{new Date(c.createdAt).toLocaleString()}</span>
+            </div>
+            <div>{c.content}</div>
           </div>
         ))}
       </div>
