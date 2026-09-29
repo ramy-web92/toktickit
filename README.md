@@ -57,9 +57,35 @@ npm test
 ## Lab 2 Documentation
 
 All specification and documentation files are located in `docs/lab-02/`:
-- `specification.md` – BR, FR, AC, data model
-- `api-spec.md` – REST API endpoints
-- `ui-spec.md` – UI specifications and screenshots
-- `tests.md` – Test plan with traceability
-- `ai-use.md` – AI usage log
-- `reviewer.md` – Peer review log
+- specification.md – BR, FR, AC, data model
+- api-spec.md – REST API endpoints
+- ui-spec.md – UI specifications and screenshots
+- tests.md– Test plan with traceability
+- ai-use.md – AI usage log
+- reviewer.md – Peer review log
+
+## Lab 3 Features (Users, Roles, IT Staff Ticketing, and Admin Screens)
+
+* Session-based authentication (login, logout, current-user, mandatory first-login password change)
+* Role-based authorization (Requester, IT Staff, Administrator)
+* Requester regression: Public Comments and "Problem Appears Resolved" on Ticket Detail
+* IT Staff Ticket Queue (search/filter/sort/pagination) and Ticket Detail (ownership, IT Priority, status transitions, Public Comments, Internal Notes)
+* Minimalist Administrator User Management (create/edit users, role assignment, activation, password reset, safety rules)
+
+## Lab 3 Documentation
+All specification and documentation files are located in `docs/lab-03/`:
+
+* specification.md – FR, BR, AC, data model, API contract
+* api-spec.m – REST API endpoints for authentication, IT Staff, and Administrator features
+* ui-spec.md – UI specifications for all Lab 3 screens
+* tests.md – Test plan with traceability (66 automated backend tests)
+* ai-use.md – AI usage log
+* reviewer.md – Peer review log for PRs #21–#40
+
+## Seeded Test Accounts (local development only)
+
+Password for all seeded users: `Password123!`
+
+* Requester: jennifer.anderson@example.com
+* IT Staff: kevin.patel@example.com
+* Administrator: john.smith@example.com
