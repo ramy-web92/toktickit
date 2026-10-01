@@ -9,7 +9,7 @@ import StaffTicketQueue from "./StaffTicketQueue.js";
 import StaffTicketDetail from "./StaffTicketDetail.js";
 import UserManagement from "./UserManagement.js";
 
-type View = "home" | "create-ticket" | "my-tickets" | "ticket-detail" | "staff-queue" | "staff-ticket-detail";
+type View = "home" | "create-ticket" | "my-tickets" | "ticket-detail" | "staff-queue" | "staff-ticket-detail" | "admin-users";
 type AuthState = "loading" | "unauthenticated" | "must-change-password" | "authenticated";
 
 export default function App() {
@@ -155,7 +155,43 @@ export default function App() {
         </>
       )}
 
-            {user.role === "ADMINISTRATOR" && <UserManagement currentUserId={user.id} />}
+         {user.role === "ADMINISTRATOR" && (
+  <>
+    <div className="mb-4">
+      <button
+        className={`btn btn-sm me-2 ${view === "staff-queue" || view === "staff-ticket-detail" || view === "home" ? "btn-success" : "btn-outline-success"}`}
+        onClick={() => setView("staff-queue")}
+      >
+        My Queue
+      </button>
+      <button
+        className={`btn btn-sm ${view === "admin-users" ? "btn-success" : "btn-outline-success"}`}
+        onClick={() => setView("admin-users")}
+      >
+        Users
+      </button>
+    </div>
+
+    {(view === "staff-queue" || view === "home") && (
+      <StaffTicketQueue currentUserId={user.id} onOpenTicket={handleOpenTicket} />
+    )}
+
+    {view === "staff-ticket-detail" && selectedTicketId && (
+      <StaffTicketDetail
+        ticketId={selectedTicketId}
+        currentUserId={user.id}
+        onBack={() => setView("staff-queue")}
+      />
+    )}
+
+    {view === "admin-users" && <UserManagement currentUserId={user.id} />}
+  </>
+)}  
+    
+    
+    
+    
+    
     </div>
   );
 }

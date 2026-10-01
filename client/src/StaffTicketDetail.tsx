@@ -8,9 +8,12 @@ import {
   postInternalNote,
   getComments,
   postComment,
+  getStaffUsers,
+  getAdminUsersList,
   StaffTicketDetailData,
   InternalNoteData,
   PublicCommentData,
+  AdminUserRow,
 } from "./api.js";
 
 type UiState = "loading" | "success" | "error";
@@ -42,6 +45,8 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
   const [newEntry, setNewEntry] = useState("");
   const [entryState, setEntryState] = useState<"idle" | "submitting" | "error">("idle");
   const [actionError, setActionError] = useState("");
+  const [staffUsers, setStaffUsers] = useState<AdminUserRow[]>([]);
+  const [reassignTarget, setReassignTarget] = useState<string>("");
 
   useEffect(() => {
     loadAll();
@@ -50,14 +55,17 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
   async function loadAll() {
     setState("loading");
     try {
-      const [t, c, n] = await Promise.all([
+      const [t, c, n, staff, admins] = await Promise.all([
         getStaffTicketDetail(ticketId),
         getComments(ticketId),
         getInternalNotes(ticketId),
+        getStaffUsers().catch(() => []),
+        getAdminUsersList().catch(() => []),
       ]);
       setTicket(t);
       setComments(c);
       setNotes(n);
+      setStaffUsers([...staff, ...admins]);
       setState("success");
     } catch {
       setState("error");
@@ -71,6 +79,18 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
       await loadAll();
     } catch {
       setActionError("Unable to claim this ticket.");
+    }
+  }
+
+  async function handleReassign() {
+    if (!reassignTarget) return;
+    setActionError("");
+    try {
+      await claimOrReassignTicket(ticketId, Number(reassignTarget));
+      setReassignTarget("");
+      await loadAll();
+    } catch {
+      setActionError("Unable to reassign this ticket.");
     }
   }
 
@@ -95,23 +115,26 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
   }
 
   async function handlePostEntry(e: React.FormEvent) {
-    e.preventDefault();
-    if (newEntry.trim().length === 0) return;
-    setEntryState("submitting");
-    try {
-      if (tab === "comments") {
-        await postComment(ticketId, newEntry.trim());
-        setComments(await getComments(ticketId));
-      } else if (tab === "notes") {
-        await postInternalNote(ticketId, newEntry.trim());
-        setNotes(await getInternalNotes(ticketId));
-      }
-      setNewEntry("");
-      setEntryState("idle");
-    } catch {
-      setEntryState("error");
-    }
+  e.preventDefault();
+  if (newEntry.trim().length === 0) {
+    setEntryState("error");
+    return;
   }
+  setEntryState("submitting");
+  try {
+    if (tab === "comments") {
+      await postComment(ticketId, newEntry.trim());
+      setComments(await getComments(ticketId));
+    } else if (tab === "notes") {
+      await postInternalNote(ticketId, newEntry.trim());
+      setNotes(await getInternalNotes(ticketId));
+    }
+    setNewEntry("");
+    setEntryState("idle");
+  } catch {
+    setEntryState("error");
+  }
+}
 
   if (state === "loading") return <p>Loading ticket…</p>;
   if (state === "error" || !ticket) {
@@ -190,7 +213,32 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
           <div className="col-md-3">
             <div className="small text-muted">Ticket Owner</div>
             {ticket.owner ? (
-              <div>{ticket.owner.name}</div>
+              <div>
+                <div className="mb-1">{ticket.owner.name}</div>
+                <div className="d-flex gap-1">
+                  <select
+                    className="form-select form-select-sm"
+                    value={reassignTarget}
+                    onChange={(e) => setReassignTarget(e.target.value)}
+                  >
+                    <option value="">Reassign to…</option>
+                    {staffUsers
+                      .filter((u) => u.isActive && u.id !== ticket.owner?.id)
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name} ({u.role})
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    className="btn btn-sm btn-outline-primary"
+                    onClick={handleReassign}
+                    disabled={!reassignTarget}
+                  >
+                    Reassign
+                  </button>
+                </div>
+              </div>
             ) : (
               <button className="btn btn-sm btn-success" onClick={handleClaim}>
                 Claim Ticket
@@ -248,19 +296,22 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
         </ul>
 
         {tab === "comments" && (
-          <>
-            <form onSubmit={handlePostEntry} className="mb-3">
-              <textarea
-                className="form-control mb-2"
-                rows={2}
-                placeholder="Type your comment here..."
-                value={newEntry}
-                onChange={(e) => setNewEntry(e.target.value)}
-              />
-              <button className="btn btn-success btn-sm" type="submit" disabled={entryState === "submitting"}>
-                {entryState === "submitting" ? "Posting…" : "Post Comment"}
-              </button>
-            </form>
+  <>
+    <form onSubmit={handlePostEntry} className="mb-3">
+      <textarea
+        className="form-control mb-2"
+        rows={2}
+        placeholder="Type your comment here..."
+        value={newEntry}
+        onChange={(e) => setNewEntry(e.target.value)}
+      />
+      {entryState === "error" && (
+        <div className="text-danger small mb-2">Comment cannot be empty.</div>
+      )}
+      <button className="btn btn-success btn-sm" type="submit" disabled={entryState === "submitting"}>
+        {entryState === "submitting" ? "Posting…" : "Post Comment"}
+      </button>
+    </form>
             {comments.length === 0 && <p className="text-muted">No comments yet.</p>}
             {comments.map((c) => (
               <div key={c.id} className="border-bottom py-2">
@@ -278,20 +329,23 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
         )}
 
         {tab === "notes" && (
-          <>
-            <div className="alert alert-warning py-2 small">Internal — IT Staff and Administrator only</div>
-            <form onSubmit={handlePostEntry} className="mb-3">
-              <textarea
-                className="form-control mb-2"
-                rows={2}
-                placeholder="Type your internal note here..."
-                value={newEntry}
-                onChange={(e) => setNewEntry(e.target.value)}
-              />
-              <button className="btn btn-warning btn-sm" type="submit" disabled={entryState === "submitting"}>
-                {entryState === "submitting" ? "Posting…" : "Post Note"}
-              </button>
-            </form>
+  <>
+    <div className="alert alert-warning py-2 small">Internal — IT Staff and Administrator only</div>
+    <form onSubmit={handlePostEntry} className="mb-3">
+      <textarea
+        className="form-control mb-2"
+        rows={2}
+        placeholder="Type your internal note here..."
+        value={newEntry}
+        onChange={(e) => setNewEntry(e.target.value)}
+      />
+      {entryState === "error" && (
+        <div className="text-danger small mb-2">Note cannot be empty.</div>
+      )}
+      <button className="btn btn-warning btn-sm" type="submit" disabled={entryState === "submitting"}>
+        {entryState === "submitting" ? "Posting…" : "Post Note"}
+      </button>
+    </form>
             {notes.length === 0 && <p className="text-muted">No internal notes yet.</p>}
             {notes.map((n) => (
               <div key={n.id} className="border-bottom py-2 bg-warning-subtle px-2 rounded">

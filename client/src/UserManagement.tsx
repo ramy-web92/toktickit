@@ -191,39 +191,65 @@ export default function UserManagement({ currentUserId }: Props) {
       )}
 
       {state === "success" && (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Role</th>
-              <th>Status</th>
-              <th></th>
+  <>
+    <div className="table-responsive d-none d-md-block">
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {users.map((u) => (
+            <tr key={u.id}>
+              <td>{u.name}</td>
+              <td>{u.email}</td>
+              <td>
+                <span className="badge bg-secondary-subtle text-secondary-emphasis">{u.role}</span>
+              </td>
+              <td>
+                <span className={`badge ${u.isActive ? "bg-success-subtle text-success-emphasis" : "bg-danger-subtle text-danger-emphasis"}`}>
+                  {u.isActive ? "Active" : "Inactive"}
+                </span>
+              </td>
+              <td>
+                <button className="btn btn-sm btn-outline-secondary" onClick={() => openEditPanel(u)}>
+                  Edit
+                </button>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td>{u.name}</td>
-                <td>{u.email}</td>
-                <td>
-                  <span className="badge bg-secondary-subtle text-secondary-emphasis">{u.role}</span>
-                </td>
-                <td>
-                  <span className={`badge ${u.isActive ? "bg-success-subtle text-success-emphasis" : "bg-danger-subtle text-danger-emphasis"}`}>
-                    {u.isActive ? "Active" : "Inactive"}
-                  </span>
-                </td>
-                <td>
-                  <button className="btn btn-sm btn-outline-secondary" onClick={() => openEditPanel(u)}>
-                    Edit
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    <div className="d-md-none">
+      {users.map((u) => (
+        <div key={u.id} className="card mb-2">
+          <div className="card-body py-2 px-3">
+            <div className="d-flex justify-content-between align-items-start mb-1">
+              <strong>{u.name}</strong>
+              <span className={`badge ${u.isActive ? "bg-success-subtle text-success-emphasis" : "bg-danger-subtle text-danger-emphasis"}`}>
+                {u.isActive ? "Active" : "Inactive"}
+              </span>
+            </div>
+            <div className="small text-muted mb-2">{u.email}</div>
+            <div className="d-flex justify-content-between align-items-center">
+              <span className="badge bg-secondary-subtle text-secondary-emphasis">{u.role}</span>
+              <button className="btn btn-sm btn-outline-secondary" onClick={() => openEditPanel(u)}>
+                Edit
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </>
+)}
 
       {panelMode !== "closed" && (
         <div

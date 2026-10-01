@@ -88,7 +88,7 @@ export async function createTicket(input: CreateTicketInput): Promise<CreateTick
   formData.append("requestedPriority", input.requestedPriority);
   input.attachments.forEach((file) => formData.append("attachments", file));
 
-    const res = await fetch(`${API_URL}/api/tickets`, {
+  const res = await fetch(`${API_URL}/api/tickets`, {
     method: "POST",
     credentials: "include",
     body: formData,
@@ -216,12 +216,16 @@ export async function getStaffTickets(params: {
   search?: string;
   status?: string;
   owner?: string;
+  sortBy?: string;
+  sortDir?: "asc" | "desc";
 }): Promise<StaffQueueResult> {
   const query = new URLSearchParams();
   if (params.page) query.set("page", String(params.page));
   if (params.search) query.set("search", params.search);
   if (params.status) query.set("status", params.status);
   if (params.owner) query.set("owner", params.owner);
+  if (params.sortBy) query.set("sortBy", params.sortBy);
+  if (params.sortDir) query.set("sortDir", params.sortDir);
 
   const res = await fetch(`${API_URL}/api/staff/tickets?${query.toString()}`, {
     credentials: "include",
@@ -380,4 +384,22 @@ export async function resetAdminUserPassword(id: number, newInitialPassword: str
   });
   const data = await res.json();
   if (!res.ok) throw { status: res.status, ...data };
+}
+
+export async function getStaffUsers(): Promise<AdminUserRow[]> {
+  const res = await fetch(`${API_URL}/api/admin/users?role=IT_STAFF`, {
+    credentials: "include",
+  });
+  const data = await res.json();
+  if (!res.ok) throw { status: res.status, ...data };
+  return data.users;
+}
+
+export async function getAdminUsersList(): Promise<AdminUserRow[]> {
+  const res = await fetch(`${API_URL}/api/admin/users?role=ADMINISTRATOR`, {
+    credentials: "include",
+  });
+  const data = await res.json();
+  if (!res.ok) throw { status: res.status, ...data };
+  return data.users;
 }
