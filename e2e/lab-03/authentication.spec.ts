@@ -30,4 +30,15 @@ test.describe("Lab 3 — Authentication", () => {
     await expect(page.locator('input[type="email"]')).toBeVisible({ timeout: 10000 });
   });
 
+  test("E2E-04: First-login password change required", async ({ page }) => {
+    // Use a user with mustChangePassword = true
+    // Michael Brown is set to mustChangePassword=true in Prisma
+    await page.goto("/");
+    await page.fill('input[type="email"]', "michael.brown@example.com");
+    await page.fill('input[type="password"]', "Password123!");
+    await page.click('button:has-text("Sign In")');
+    // Should be forced to Change Password screen
+    await expect(page.locator("text=You must change your password to continue")).toBeVisible({ timeout: 10000 });
+  });
+
 });

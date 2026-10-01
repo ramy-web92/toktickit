@@ -15,7 +15,7 @@ Criterion in `specification.md` maps to at least one row below.
 | API-06 | API | AC-02 | Current-user while mustChangePassword=true | Flag returned; app screens blocked until changed | server/tests/lab-03/auth.api.test.ts | Pass |
 | UNIT-01 | Unit | BR-08 | Password hashing | Hash differs from plaintext; same password → different hash (salt) | server/tests/lab-03/auth.api.test.ts | Pass |
 | E2E-01 | E2E | AC-01 | Valid login via UI | Redirects to role home screen | e2e/lab-03/authentication.spec.ts | Pass |
-| E2E-02 | E2E | AC-02 | Initial password login and change | Normal app opens only after valid change | e2e/lab-03/authentication.spec.ts | Planned |
+| E2E-02 | E2E | AC-02 | Initial password login and change | Normal app opens only after valid change | e2e/lab-03/authentication.spec.ts | Pass |
 | E2E-03 | E2E | AC-10 | Logout then back-button/direct URL | Redirected to /login | e2e/lab-03/authentication.spec.ts | Pass |
 
 ## Authorization & Ownership
