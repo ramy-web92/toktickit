@@ -10,7 +10,7 @@ Breakpoints: mobile < 768 px (tested at 360), tablet 768–1023 (tested at 768),
 |---|---|---|
 | Requester | Dashboard · My Tickets · Create Ticket · Profile | `/dashboard` |
 | IT Staff | Dashboard · Queue · Create Ticket · Profile | `/dashboard` |
-| Admin | Dashboard · Queue · Users · Create Ticket · Profile | `/dashboard` |
+| Administrator | Dashboard · Queue · Users · Create Ticket · Profile | `/dashboard` |
 
 Active item: underline + `aria-current="page"`. Mobile: nav collapses into a menu button (`aria-expanded`), focus trapped while open, `Esc` closes.
 
@@ -70,7 +70,7 @@ Buttons: Save (primary, disabled + spinner while submitting), Cancel (secondary;
 - If none allowed, the button is not rendered (Closed/Cancelled show "This ticket is closed").
 - "Resolve" disabled-with-reason when gate fails locally (e.g. "Complete all open actions first"); server error RESOLUTION_GATE shown as banner with same text.
 - "Cancel ticket" opens a dialog with required reason (`role="dialog"`, labelled, focus trapped, `Esc` closes, focus returns to trigger).
-- Requester on own active Ticket: "This looks resolved" button → after success shows "You told IT this looks resolved on {date}. IT Staff will confirm."
+- Requester on own active Ticket: existing Lab 3 "Problem appears resolved" button → after success shows "You told IT this looks resolved on {date}. IT Staff will confirm."
 - On success: badge, menu, history and dashboard caches refresh; Toast "Status changed to Resolved".
 - "Status history" collapsible list under the header.
 

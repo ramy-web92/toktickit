@@ -2,7 +2,7 @@
 
 Tools (assumed from Labs 2–3): Vitest/Jest + Supertest (server), Vitest + React Testing Library (client), Playwright + @axe-core/playwright (E2E). Tests are written before or with the implementation (TDD): each test starts **Planned → Red → Green**. Final column filled at the end of the sprint from the `main` CI run.
 
-Paths: `server/tests/lab-04/`, `client/src/__tests__/lab-04/`, `e2e/lab-04/`.
+Paths: `server/tests/lab-04/`, `client/tests/lab-04/`, `e2e/lab-04/` (same layout as Labs 1–3). Server tests run against the migrated and seeded development database, like the Lab 2–3 suites.
 
 ## Unit
 
@@ -32,10 +32,10 @@ Paths: `server/tests/lab-04/`, `client/src/__tests__/lab-04/`, `e2e/lab-04/`.
 | API-12 | AC-13 | Two PATCH with same expectedVersion | 200 then 409 STALE_UPDATE with current | actions-taken.api.test.ts | |
 | API-13 | AC-14 | Same Idempotency-Key twice, and in parallel | 1 row; 201 then 200 | actions-taken.api.test.ts | |
 | API-14 | AC-10 | Each permitted transition per role | 200 + history row | server/tests/lab-04/ticket-workflow.api.test.ts | |
-| API-15 | AC-10 | Representative forbidden transitions (same-status, from Closed/Cancelled, Requester → Resolved) | 409 / 403 | ticket-workflow.api.test.ts | |
+| API-15 | AC-10 | Representative forbidden transitions (same-status, from Cancelled, NEW → CLOSED, Requester calling status endpoint) | 409 / 403 | ticket-workflow.api.test.ts | |
 | API-16 | AC-11 | Resolve with no completed action / with open action | 409 RESOLUTION_GATE + reason | ticket-workflow.api.test.ts | |
 | API-17 | BR-18 | resolvedAt/closedAt set, cleared on Reopen | Timestamps correct | ticket-workflow.api.test.ts | |
-| API-18 | AC-12 | Requester resolution indication | 200, status unchanged, idempotent | ticket-workflow.api.test.ts | |
+| API-18 | AC-12 | Requester "problem appears resolved" (Lab 3 endpoint extended) | 200, timestamp set, status unchanged | ticket-workflow.api.test.ts | |
 | API-19 | BR-20 | Cancel without reason | 422 | ticket-workflow.api.test.ts | |
 | API-20 | AC-13 | Concurrent ticket transitions | One 200, one 409 STALE_UPDATE | ticket-workflow.api.test.ts | |
 | API-21 | FR-09 | `allowedTransitions` in Ticket detail per role/status | Matches matrix | ticket-workflow.api.test.ts | |
@@ -54,9 +54,9 @@ Paths: `server/tests/lab-04/`, `client/src/__tests__/lab-04/`, `e2e/lab-04/`.
 
 | Test ID | Req / AC | What it tests | Expected | File | Final |
 |---|---|---|---|---|---|
-| MIG-01 | AC-22 | Apply migration on Lab 3 snapshot; row counts of Users/Tickets/Comments/Notes/Attachments | Unchanged | server/tests/lab-04/migration.test.ts | |
-| MIG-02 | §7 | Backfill resolvedAt/closedAt | Set for Resolved/Closed | migration.test.ts | |
-| MIG-03 | §7 | Down → up cycle | Succeeds, Lab 3 suite green | migration.test.ts | |
+| MIG-01 | AC-22 | After migration: Lab 1–3 tables still populated, Lab 3 columns kept, Lab 4 columns/tables present | All present | server/tests/lab-04/migration.test.ts | |
+| MIG-02 | §7, BR-26 | Backfill resolvedAt/closedAt/requesterMarkedResolvedAt; legacy Tickets without actions valid | No missing values | migration.test.ts | |
+| MIG-03 | §7 | Rollback script drops only Lab 4 objects (automated) + manual down → up cycle with Lab 3 suite (evidence in PR) | Lab 1–3 untouched | migration.test.ts | |
 | SEED-01 | AC-23 | Run seed twice | Identical counts | server/tests/lab-04/seed.test.ts | |
 | SEED-02 | §7 | Seed coverage: all statuses, priorities, 0/1/many actions, inactive staff, empty Requester | Present | seed.test.ts | |
 | REG-01 | FR-21 | Full Lab 1–3 server suites | All pass | server/tests/lab-02, lab-03 | |
@@ -66,7 +66,7 @@ Paths: `server/tests/lab-04/`, `client/src/__tests__/lab-04/`, `e2e/lab-04/`.
 
 | Test ID | Req / AC | What it tests | Expected | File | Final |
 |---|---|---|---|---|---|
-| UI-01 | FR-14 | StaffDashboard renders cards, tables, lists from mock | Values + links correct | client/src/__tests__/lab-04/StaffDashboard.test.tsx | |
+| UI-01 | FR-14 | StaffDashboard renders cards, tables, lists from mock | Values + links correct | client/tests/lab-04/StaffDashboard.test.tsx | |
 | UI-02 | FR-17 | StaffDashboard loading / empty / error+Retry | Correct state shown | StaffDashboard.test.tsx | |
 | UI-03 | FR-13 | RequesterDashboard renders metrics and lists | Correct | RequesterDashboard.test.tsx | |
 | UI-04 | AC-16 | RequesterDashboard empty | 0s + Create Ticket CTA | RequesterDashboard.test.tsx | |
@@ -102,7 +102,7 @@ Paths: `server/tests/lab-04/`, `client/src/__tests__/lab-04/`, `e2e/lab-04/`.
 | RESP-02 | AC-20 | Screenshots at 3 widths saved to artifacts | Files exist | responsive.spec.ts | |
 | A11Y-01 | AC-21 | axe scan of all Lab 4 screens | 0 serious/critical | e2e/lab-04/a11y.spec.ts | |
 | A11Y-02 | AC-21 | Keyboard-only: dashboard card → list; add action; change status | Completed without mouse | a11y.spec.ts | |
-| STYLE-01 | §7 ui-spec | Badges/cards use Zen Green tokens (class/computed color check) | Match tokens | client/src/__tests__/lab-04/style.test.tsx | |
+| STYLE-01 | §7 ui-spec | Badges/cards use Zen Green tokens (class/computed color check) | Match tokens | client/tests/lab-04/style.test.tsx | |
 | CON-01 | FR-22 | No console errors on all routes | 0 errors | e2e/lab-04/console.spec.ts | |
 
 ## Performance smoke

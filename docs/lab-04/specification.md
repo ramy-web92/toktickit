@@ -1,8 +1,8 @@
 # TokTickIT — Sprint 4 Engineering Specification
 
-> Status: Draft v1 — must be merged to `lab4-staging` before any implementation PR.
+> Status: v1.1 — aligned with the Lab 3 codebase after peer review. Must be merged to `lab4-staging` before any implementation PR.
 > Related: [api-spec.md](./api-spec.md) · [ui-spec.md](./ui-spec.md) · [tests.md](./tests.md)
-> Naming note: model and field names below assume the Lab 3 schema (`User`, `Ticket`, `role`, `isActive`, `ownerId`, `requesterId`, `itPriority`). Align with the actual `schema.prisma` before coding.
+> Naming: names follow the existing Lab 3 schema — integer ids, `Role` = `REQUESTER | IT_STAFF | ADMINISTRATOR`, `Ticket.currentStatus`, `Ticket.ownerId`, `Ticket.itPriority`, `Ticket.requesterMarkedResolved`.
 
 ## 1. Sprint Goal
 
@@ -60,10 +60,10 @@ The service desk can receive and discuss Tickets but cannot track the actual wor
 ### 5.1 Actions Taken
 - **BR-01** An Action Taken belongs to exactly one Ticket (non-null FK, no re-parenting).
 - **BR-02** The Ticket Owner coordinates the Ticket; an Action Taken may be created, assigned to, or performed by a different IT Staff member.
-- **BR-03** Only `IT_STAFF` and `ADMIN` can create, edit, assign or transition an Action Taken. Requesters have read-only access on Tickets they own. Enforced in the backend on every write.
+- **BR-03** Only `IT_STAFF` and `ADMINISTRATOR` can create, edit, assign or transition an Action Taken. Requesters have read-only access on Tickets they own. Enforced in the backend on every write.
 - **BR-04** `createdById` is always the authenticated user; it is never taken from the request body.
 - **BR-05** `performedById` is set automatically to the authenticated user who moves the action to `COMPLETED`. It is never taken from the request body.
-- **BR-06** If no assignee is given at creation, the assignee defaults to the creator. An assignee must be an active (`isActive = true`) user with role `IT_STAFF` or `ADMIN`; otherwise `422 INVALID_ASSIGNEE`.
+- **BR-06** If no assignee is given at creation, the assignee defaults to the creator. An assignee must be an active (`isActive = true`) user with role `IT_STAFF` or `ADMINISTRATOR`; otherwise `422 INVALID_ASSIGNEE`.
 - **BR-07** Description: required, trimmed, 1–2000 chars. Result: optional while `PLANNED`/`IN_PROGRESS`, **required** to move to `COMPLETED` (1–2000 chars).
 - **BR-08** If `followUpRequired = true`, `followUpNote` is required (1–1000 chars). If `false`, `followUpNote` is stored as `null`.
 - **BR-09** `actionAt` defaults to the server time at creation; it may be edited but cannot be more than 5 minutes in the future (clock tolerance) nor before the Ticket's `createdAt`.
@@ -78,28 +78,30 @@ The service desk can receive and discuss Tickets but cannot track the actual wor
 
 ### 5.3 Ticket status transition matrix
 
+The Lab 3 matrix (Lab 3 BR-13) is **kept unchanged** so that Lab 3 regression tests keep passing. Lab 4 adds the resolution gate, timestamps, history and concurrency on top of it.
+
 | From \ To | Open | In Progress | Waiting for Requester | Resolved | Closed | Reopened | Cancelled |
 |---|---|---|---|---|---|---|---|
-| **New** | S | S | – | – | – | – | S, R |
-| **Open** | – | S | S | – | – | – | S, R |
+| **New** | S | – | – | – | – | – | S |
+| **Open** | – | S | S | – | – | – | S |
 | **In Progress** | – | – | S | S* | – | – | S |
 | **Waiting for Requester** | – | S | – | S* | – | – | S |
-| **Resolved** | – | – | – | – | S | S, R | – |
-| **Closed** | – | – | – | – | – | – | – |
-| **Reopened** | – | S | S | – | – | – | S |
+| **Resolved** | – | – | – | – | S | S | – |
+| **Closed** | – | – | – | – | – | S | – |
+| **Reopened** | S | S | – | – | – | – | S |
 | **Cancelled** | – | – | – | – | – | – | – |
 
-S = IT Staff or Administrator · R = Requester who owns the Ticket · `*` = resolution gate (BR-17) · – = forbidden.
+S = IT Staff or Administrator · `*` = resolution gate (BR-17) · – = forbidden. Requesters never change the formal status (Lab 3 BR-05); they can only mark the problem as appearing resolved (BR-19).
 
-- **BR-16** Any transition not in the matrix, including same-status, returns `409 INVALID_TRANSITION`. Closed and Cancelled are terminal.
-- **BR-17** Resolution gate: a Ticket can move to `Resolved` only if (a) the actor is IT Staff/Admin, (b) it has at least one `COMPLETED` Action Taken, and (c) it has no `PLANNED` or `IN_PROGRESS` Action Taken. Otherwise `409 RESOLUTION_GATE` with the failing condition in `details`.
-- **BR-18** Moving to `Resolved` sets `resolvedAt = now()`; moving to `Reopened` clears `resolvedAt`; moving to `Closed` sets `closedAt = now()`.
-- **BR-19** A Requester resolution indication sets `requesterResolvedIndicatedAt = now()` on a Ticket they own in status `In Progress`, `Waiting for Requester` or `Reopened`. It never changes the status. It is cleared on any subsequent status change.
-- **BR-20** A Cancel by Requester or Staff requires a reason (1–500 chars) stored in the status history.
+- **BR-16** Any transition not in the matrix, including same-status, returns `409 INVALID_TRANSITION`. Cancelled is terminal. A Requester calling the status endpoint gets `403`.
+- **BR-17** Resolution gate: a Ticket can move to `Resolved` only if (a) the actor is IT Staff/Administrator, (b) it has at least one `COMPLETED` Action Taken, and (c) it has no `PLANNED` or `IN_PROGRESS` Action Taken. Otherwise `409 RESOLUTION_GATE` with the failing condition in `details`.
+- **BR-18** Moving to `Resolved` sets `resolvedAt = now()`; moving to `Reopened` clears `resolvedAt` and `closedAt`; moving to `Closed` sets `closedAt = now()`.
+- **BR-19** The existing Lab 3 "problem appears resolved" action sets `requesterMarkedResolved = true` and `requesterMarkedResolvedAt = now()` on a Ticket the Requester owns, in status `In Progress`, `Waiting for Requester` or `Reopened`. It never changes the status. Both fields are reset on any subsequent status change.
+- **BR-20** A move to `Cancelled` requires a reason (1–500 chars) stored in the status history.
 - **BR-21** Status history is append-only; rows are never updated or deleted.
 
 ### 5.4 Concurrency and duplicates
-- **BR-22** `Ticket` and `ActionTaken` carry an integer `version`, incremented on every update. Every update/transition request must include `expectedVersion`; on mismatch the server returns `409 STALE_UPDATE` with the current resource.
+- **BR-22** `Ticket` and `ActionTaken` carry an integer `version`, incremented on every update. Update/transition requests carry `expectedVersion`; on mismatch the server returns `409 STALE_UPDATE` with the current resource. The Lab 4 UI always sends it. For Ticket endpoints inherited from Lab 3, `expectedVersion` is optional so earlier clients and tests keep working; Action Taken endpoints require it.
 - **BR-23** `POST` create of an Action Taken accepts an `Idempotency-Key` header (UUID). A repeated key from the same user for the same Ticket returns the originally created action with `200` instead of creating a duplicate.
 
 ### 5.5 Dashboard calculations
@@ -121,7 +123,7 @@ S = IT Staff or Administrator · R = Requester who owns the Ticket · `*` = reso
 
 | Metric ID | Label | Calculation | Drill-down |
 |---|---|---|---|
-| ST-M1 | Unassigned | count(active AND ownerId IS NULL) | `/queue?owner=none&status=active` |
+| ST-M1 | Unassigned | count(active AND ownerId IS NULL) | `/queue?owner=unassigned&status=active` |
 | ST-M2 | My Assigned | count(active AND ownerId = me) | `/queue?owner=me&status=active` |
 | ST-M3 | By Status | count grouped by status (all 8, zeros included) | `/queue?status=<STATUS>` |
 | ST-M4 | By IT Priority | count(active) grouped by itPriority (zeros included) | `/queue?itPriority=<P>&status=active` |
@@ -130,7 +132,7 @@ S = IT Staff or Administrator · R = Requester who owns the Ticket · `*` = reso
 | ST-L1 | Recently Updated | top 5 active by updatedAt | Ticket Detail |
 | ST-L2 | Urgent | top 5 active with highest itPriority, oldest createdAt first | Ticket Detail |
 
-**Administrator:** ST-* plus AD-M1 = count(User) grouped by role and isActive → `/admin/users?role=<R>&active=<bool>`.
+**Administrator (`ADMINISTRATOR`):** ST-* plus AD-M1 = count(User) grouped by role and isActive → `/admin/users?role=<R>&active=<bool>`.
 
 - **BR-24** Dashboard metrics are computed by the backend from the database at request time; the client never computes counts from Ticket lists.
 - **BR-25** A metric with no matching records returns `0` (never omitted); an empty list returns `[]`.
@@ -146,9 +148,8 @@ See [ui-spec.md](./ui-spec.md). New: role-based Dashboard as landing page (Reque
 enum ActionStatus { PLANNED IN_PROGRESS COMPLETED CANCELLED }
 
 model ActionTaken {
-  id               String       @id @default(uuid())
-  ticketId         String
-  ticket           Ticket       @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  id               Int          @id @default(autoincrement())
+  ticketId         Int          // FK Ticket, onDelete: Restrict
   actionAt         DateTime     @default(now())
   description      String       @db.VarChar(2000)
   result           String?      @db.VarChar(2000)
@@ -156,51 +157,42 @@ model ActionTaken {
   followUpRequired Boolean      @default(false)
   followUpNote     String?      @db.VarChar(1000)
   attachmentNotes  String?      @db.VarChar(500)
-  createdById      String
-  createdBy        User         @relation("ActionCreatedBy", fields: [createdById], references: [id])
-  assigneeId       String
-  assignee         User         @relation("ActionAssignee", fields: [assigneeId], references: [id])
-  performedById    String?
-  performedBy      User?        @relation("ActionPerformedBy", fields: [performedById], references: [id])
-  idempotencyKey   String?
+  createdById      Int          // FK User
+  assigneeId       Int          // FK User
+  performedById    Int?         // FK User, set on COMPLETED
+  idempotencyKey   String?      @db.VarChar(64)
   version          Int          @default(1)
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
-
   @@unique([createdById, ticketId, idempotencyKey])
   @@index([ticketId, actionAt, id])
   @@index([assigneeId, status])
 }
 
 model TicketStatusChange {
-  id         String       @id @default(uuid())
-  ticketId   String
-  ticket     Ticket       @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  id         Int          @id @default(autoincrement())
+  ticketId   Int          // FK Ticket, onDelete: Restrict
   fromStatus TicketStatus
   toStatus   TicketStatus
-  actorId    String
-  actor      User         @relation(fields: [actorId], references: [id])
+  actorId    Int          // FK User
   reason     String?      @db.VarChar(500)
   createdAt  DateTime     @default(now())
-
   @@index([ticketId, createdAt])
 }
 
-// Added to Ticket:
-//   version                      Int       @default(1)
-//   resolvedAt                   DateTime?
-//   closedAt                     DateTime?
-//   requesterResolvedIndicatedAt DateTime?
-//   actionsTaken                 ActionTaken[]
-//   statusChanges                TicketStatusChange[]
-//   @@index([status, ownerId])  @@index([requesterId, status])  @@index([updatedAt])
+// Added to Ticket (all nullable or defaulted, nothing removed):
+//   requesterMarkedResolvedAt DateTime?
+//   version                   Int       @default(1)
+//   resolvedAt                DateTime?
+//   closedAt                  DateTime?
+//   @@index([currentStatus, ownerId])  @@index([requesterId, currentStatus])  @@index([updatedAt])
 ```
 
-**Migration (`lab4_actions_taken`)** — additive only: new enum, two new tables, nullable/defaulted columns on `Ticket`. No column dropped or renamed. Backfill in the same migration: `resolvedAt = updatedAt` for Tickets already `Resolved`/`Closed`; `closedAt = updatedAt` for `Closed`; `version = 1` by default.
+**Migration (`lab4_actions_taken`)** — additive only: new enum, two new tables, nullable/defaulted columns on `Ticket`. No column dropped or renamed. Backfill in the same migration: `resolvedAt = updatedAt` for Tickets already `Resolved`/`Closed`; `closedAt = updatedAt` for `Closed`; `requesterMarkedResolvedAt = updatedAt` where `requesterMarkedResolved = true`; `version = 1` by default.
 
 **Rollback/recovery** — a down script (`prisma/rollback/lab4_down.sql`) drops the two new tables, the enum and the added columns; Lab 1–3 data is untouched. Tested by: migrate up → seed → down → Lab 3 regression suite passes → up again.
 
-**Seed** — idempotent via `upsert` on fixed IDs/emails. Covers every Ticket status and IT Priority, assigned and unassigned Tickets, Tickets with 0, 1 and 3+ Actions Taken (mixing all action statuses, with and without follow-up), one inactive IT Staff (for invalid-assignee tests), and one Requester with zero Tickets (empty dashboard).
+**Seed** — idempotent via `upsert` on unique emails/ticket numbers and fixed `idempotencyKey` values for actions. New users and tickets are appended after the Lab 3 ones so existing ids used by Lab 2–3 tests never change. Covers every Ticket status and IT Priority, assigned and unassigned Tickets, Tickets with 0, 1 and 3+ Actions Taken (mixing all action statuses, with and without follow-up), one inactive IT Staff (for invalid-assignee tests), and one Requester with zero Tickets (empty dashboard).
 
 **Design decisions (justified)**
 - **DD-1 Integer `version` instead of `updatedAt` comparison** — timestamps can collide at millisecond precision and depend on client clock serialization; an integer is exact, cheap and easy to test.
@@ -227,7 +219,7 @@ See [api-spec.md](./api-spec.md). New endpoints: list/create/update/transition A
 | AC-09 | Given a Ticket in `Closed` or `Cancelled`, when an action is created or edited, then 409 TICKET_LOCKED is returned. |
 | AC-10 | Given each (status, role) pair, when a transition is requested, then only matrix-permitted transitions succeed and all others return 409 INVALID_TRANSITION or 403. |
 | AC-11 | Given a Ticket with no completed action or with an open action, when IT Staff request `Resolved`, then 409 RESOLUTION_GATE is returned with the failing condition. |
-| AC-12 | Given a Requester owning an In Progress Ticket, when they indicate "looks resolved", then the indication is stored and the status is unchanged. |
+| AC-12 | Given a Requester owning an In Progress Ticket, when they indicate "looks resolved", then `requesterMarkedResolved` and its timestamp are stored and the status is unchanged. |
 | AC-13 | Given two users holding version N, when both submit an update, then the first succeeds and the second gets 409 STALE_UPDATE with the current data. |
 | AC-14 | Given the same Idempotency-Key sent twice, when creating an action, then exactly one action exists. |
 | AC-15 | Given the seed data, when the IT Staff dashboard is retrieved, then each metric equals the result of its documented SQL query. |
@@ -259,7 +251,7 @@ See [api-spec.md](./api-spec.md). New endpoints: list/create/update/transition A
 - **D-01** The handout's grading mentions assign/complete/cancel/inactive-assignee for Actions Taken, which the field list does not define. We add `assignee` and `status` to Actions Taken to support planning, as requested by the stakeholder ("plan and track the actual work").
 - **D-02** "Performed by (auto)" = the user who completes the action; `createdBy` is tracked separately.
 - **D-03** Requesters see all Actions Taken of their own Tickets (handout §8.3). Internal Notes remain staff-only.
-- **D-04** Closed is terminal; a Requester who disagrees after closure creates a new Ticket.
+- **D-04** The Lab 3 transition matrix is kept as is (including Closed → Reopened by IT Staff) to preserve regression; Lab 4 only adds the resolution gate.
 - **D-05** Time zone for day boundaries is `Asia/Bangkok`.
 - **D-06** Dashboard "+N from yesterday" deltas from the mockup are excluded: they need daily snapshots, which no approved data model provides.
 - **D-07** Unauthorized access to another Requester's resources returns 404 rather than 403, to avoid leaking Ticket existence.
