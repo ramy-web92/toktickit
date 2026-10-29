@@ -6,6 +6,8 @@ import { getPrisma } from "./prisma.js";
 import multer from "multer";
 import { createActionsRouter } from "./lab4/actionsRouter.js";
 import { createWorkflowRouter, withAllowedTransitions } from "./lab4/workflowRouter.js";
+import { createDashboardRouter } from "./lab4/dashboardRouter.js";
+import { requesterListFilters, staffQueueFilters } from "./lab4/dashboard.js";
 
 export const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -54,6 +56,8 @@ function requireRole(...roles: Array<"REQUESTER" | "IT_STAFF" | "ADMINISTRATOR">
 app.use(createActionsRouter({ requireAuth, requireRole }));
 // Lab 4: Ticket workflow (replaces the Lab 3 status and "problem appears resolved" handlers)
 app.use(createWorkflowRouter({ requireAuth, requireRole }));
+// Lab 4: dashboards
+app.use(createDashboardRouter({ requireAuth, requireRole }));
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -251,7 +255,8 @@ app.get("/api/tickets", requireAuth, requireRole("REQUESTER"), async (req: Reque
     }
     if (categoryId) where.categoryId = categoryId;
     if (requestedPriority) where.requestedPriority = requestedPriority;
-    if (currentStatus) where.currentStatus = currentStatus;
+    // Lab 4: also accepts currentStatus=active (dashboard drill-down)
+    Object.assign(where, requesterListFilters({ currentStatus }));
 
     const [tickets, totalItems] = await Promise.all([
       prisma.ticket.findMany({
@@ -458,9 +463,7 @@ app.get("/api/staff/tickets", requireAuth, requireRole("IT_STAFF", "ADMINISTRATO
       : 10;
 
     const search = (req.query.search as string) || "";
-    const status = req.query.status as string | undefined;
     const category = req.query.category as string | undefined;
-    const owner = req.query.owner as string | undefined;
 
     const sortByRaw = req.query.sortBy as string | undefined;
     const sortBy = ALLOWED_SORT_FIELDS.includes(sortByRaw as any)
@@ -475,16 +478,10 @@ app.get("/api/staff/tickets", requireAuth, requireRole("IT_STAFF", "ADMINISTRATO
         { summary: { contains: search, mode: "insensitive" } },
       ];
     }
-    if (status) where.currentStatus = status;
     if (category) where.category = { name: category };
-
-    if (owner === "unassigned") {
-      where.ownerId = null;
-    } else if (owner === "me") {
-      where.ownerId = req.session.userId;
-    } else if (owner && !isNaN(Number(owner))) {
-      where.ownerId = Number(owner);
-    }
+    // status, owner (Lab 3) + status=active, itPriority, actionAssignee, followUp (Lab 4 drill-down).
+    // Shared with the dashboard so counts and lists always match (AC-17).
+    Object.assign(where, staffQueueFilters(req.query, req.session.userId!));
 
     const [tickets, totalItems] = await Promise.all([
       prisma.ticket.findMany({
