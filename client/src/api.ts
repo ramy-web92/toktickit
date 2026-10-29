@@ -216,6 +216,9 @@ export async function getStaffTickets(params: {
   search?: string;
   status?: string;
   owner?: string;
+  itPriority?: string;
+  actionAssignee?: string;
+  followUp?: string;
   sortBy?: string;
   sortDir?: "asc" | "desc";
 }): Promise<StaffQueueResult> {
@@ -224,6 +227,10 @@ export async function getStaffTickets(params: {
   if (params.search) query.set("search", params.search);
   if (params.status) query.set("status", params.status);
   if (params.owner) query.set("owner", params.owner);
+  // Lab 4 drill-down filters
+  if (params.itPriority) query.set("itPriority", params.itPriority);
+  if (params.actionAssignee) query.set("actionAssignee", params.actionAssignee);
+  if (params.followUp) query.set("followUp", params.followUp);
   if (params.sortBy) query.set("sortBy", params.sortBy);
   if (params.sortDir) query.set("sortDir", params.sortDir);
 
@@ -559,4 +566,61 @@ export async function markProblemResolved(ticketId: number): Promise<WorkflowTic
     credentials: "include",
   });
   return (await lab4Json<{ ticket: WorkflowTicket }>(res)).ticket;
+}
+
+// ---------------------------------------------------------------------------
+// Lab 4 — Dashboards (docs/lab-04/api-spec.md, "Dashboards")
+
+export interface DashboardMetric {
+  id: string;
+  label: string;
+  value: number;
+  drillDown: string;
+}
+
+export interface DashboardTicket {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  currentStatus: string;
+  itPriority: string;
+  updatedAt: string;
+  resolvedAt: string | null;
+  requesterMarkedResolved: boolean;
+  owner?: { id: number; name: string } | null;
+}
+
+export interface RequesterDashboardData {
+  generatedAt: string;
+  timeZone: string;
+  metrics: DashboardMetric[];
+  recentlyUpdated: DashboardTicket[];
+  recentlyResolved: DashboardTicket[];
+}
+
+export interface StaffDashboardData {
+  generatedAt: string;
+  timeZone: string;
+  metrics: DashboardMetric[];
+  byStatus: { status: string; value: number; drillDown: string }[];
+  byPriority: { itPriority: string; value: number; drillDown: string }[];
+  recentlyUpdated: DashboardTicket[];
+  urgent: DashboardTicket[];
+  users?: { role: string; active: number; inactive: number; drillDown: string }[];
+}
+
+export async function getRequesterDashboard(): Promise<RequesterDashboardData> {
+  const res = await fetch(`${API_URL}/api/dashboard/requester`, { credentials: "include" });
+  return lab4Json<RequesterDashboardData>(res);
+}
+
+export async function getStaffDashboard(): Promise<StaffDashboardData> {
+  const res = await fetch(`${API_URL}/api/dashboard/staff`, { credentials: "include" });
+  return lab4Json<StaffDashboardData>(res);
+}
+
+/** Splits a dashboard drill-down link ("/queue?status=active") into a target and its filters. */
+export function parseDrillDown(link: string): { target: string; params: Record<string, string> } {
+  const [path, query = ""] = link.split("?");
+  return { target: path.replace(/^\//, ""), params: Object.fromEntries(new URLSearchParams(query)) };
 }

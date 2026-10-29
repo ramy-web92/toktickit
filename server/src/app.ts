@@ -448,7 +448,8 @@ app.delete("/api/attachments/:id", requireAuth, requireRole("REQUESTER"), async 
 
 // --- IT Staff Ticket Queue & Ticket operations ---
 
-const ALLOWED_SORT_FIELDS = ["createdAt", "requestedPriority", "itPriority", "currentStatus"] as const;
+// Lab 4: ticketNumber, summary and updatedAt added (the Lab 3 queue offered them but they were ignored).
+const ALLOWED_SORT_FIELDS = ["createdAt", "updatedAt", "ticketNumber", "summary", "requestedPriority", "itPriority", "currentStatus"] as const;
 
 // BR-13 status transitions now live in src/lab4/ticketWorkflow.ts (Lab 4).
 
