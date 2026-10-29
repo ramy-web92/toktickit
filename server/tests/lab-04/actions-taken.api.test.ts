@@ -276,3 +276,23 @@ describe("POST /api/tickets/:id/actions/:actionId/transition", () => {
     expect(res.body.createdBy.id).toBe(await userId("john.smith@example.com"));
   });
 });
+
+describe("GET /api/staff/assignees", () => {
+  it("lists only active IT Staff and Administrators, for IT Staff too", async () => {
+    const res = await staff.get("/api/staff/assignees");
+    expect(res.status).toBe(200);
+    const emails = await prisma.user.findMany({
+      where: { id: { in: res.body.users.map((u: any) => u.id) } },
+      select: { role: true, isActive: true },
+    });
+    expect(emails.length).toBeGreaterThan(0);
+    for (const u of emails) {
+      expect(u.isActive).toBe(true);
+      expect(["IT_STAFF", "ADMINISTRATOR"]).toContain(u.role);
+    }
+  });
+
+  it("is forbidden for Requesters", async () => {
+    expect((await requester.get("/api/staff/assignees")).status).toBe(403);
+  });
+});

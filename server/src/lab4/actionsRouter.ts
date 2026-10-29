@@ -102,6 +102,21 @@ async function guardedUpdate(
 export function createActionsRouter({ requireAuth, requireRole }: Deps): Router {
   const router = Router();
 
+  // GET /api/staff/assignees — active IT Staff and Administrators, for assignee pickers (BR-06).
+  // The Lab 3 /api/admin/users route is Administrator-only, so IT Staff need this one.
+  router.get("/api/staff/assignees", requireAuth, requireRole(...STAFF_ROLES), async (_req: Request, res: Response) => {
+    try {
+      const users = await getPrisma().user.findMany({
+        where: { isActive: true, role: { in: STAFF_ROLES } },
+        select: { id: true, name: true, role: true },
+        orderBy: [{ name: "asc" }, { id: "asc" }],
+      });
+      res.status(200).json({ users });
+    } catch {
+      sendError(res, 500, "INTERNAL_ERROR", "Something went wrong. Please try again.");
+    }
+  });
+
   // GET /api/tickets/:id/actions — staff any Ticket, Requester own Ticket only (BR-03, BR-15)
   router.get("/api/tickets/:id/actions", requireAuth, async (req: Request, res: Response) => {
     try {
