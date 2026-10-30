@@ -1,6 +1,6 @@
 # TokTickIT — Sprint 4 Engineering Specification
 
-> Status: v1.1 — aligned with the Lab 3 codebase after peer review. Must be merged to `lab4-staging` before any implementation PR.
+> Status: v1.2 — v1.1 aligned with the Lab 3 codebase after peer review; v1.2 records the decisions taken during implementation (D-08..D-12). Must be merged to `lab4-staging` before any implementation PR.
 > Related: [api-spec.md](./api-spec.md) · [ui-spec.md](./ui-spec.md) · [tests.md](./tests.md)
 > Naming: names follow the existing Lab 3 schema — integer ids, `Role` = `REQUESTER | IT_STAFF | ADMINISTRATOR`, `Ticket.currentStatus`, `Ticket.ownerId`, `Ticket.itPriority`, `Ticket.requesterMarkedResolved`.
 
@@ -112,10 +112,10 @@ S = IT Staff or Administrator · `*` = resolution gate (BR-17) · – = forbidde
 
 | Metric ID | Label | Calculation | Drill-down |
 |---|---|---|---|
-| RQ-M1 | My Open Tickets | count(active) | `/my-tickets?status=active` |
-| RQ-M2 | Waiting for Me | count(status = Waiting for Requester) | `/my-tickets?status=WAITING_FOR_REQUESTER` |
-| RQ-M3 | Resolved | count(status = Resolved) | `/my-tickets?status=RESOLVED` |
-| RQ-M4 | Closed | count(status = Closed) | `/my-tickets?status=CLOSED` |
+| RQ-M1 | My Open Tickets | count(active) | `/my-tickets?currentStatus=active` |
+| RQ-M2 | Waiting for Me | count(status = Waiting for Requester) | `/my-tickets?currentStatus=WAITING_FOR_REQUESTER` |
+| RQ-M3 | Resolved | count(status = Resolved) | `/my-tickets?currentStatus=RESOLVED` |
+| RQ-M4 | Closed | count(status = Closed) | `/my-tickets?currentStatus=CLOSED` |
 | RQ-L1 | Recently Updated | top 5 by updatedAt | Ticket Detail |
 | RQ-L2 | Recently Resolved | top 5 with resolvedAt ≥ start of day (Bangkok) − 7 days | Ticket Detail |
 
@@ -127,14 +127,14 @@ S = IT Staff or Administrator · `*` = resolution gate (BR-17) · – = forbidde
 | ST-M2 | My Assigned | count(active AND ownerId = me) | `/queue?owner=me&status=active` |
 | ST-M3 | By Status | count grouped by status (all 8, zeros included) | `/queue?status=<STATUS>` |
 | ST-M4 | By IT Priority | count(active) grouped by itPriority (zeros included) | `/queue?itPriority=<P>&status=active` |
-| ST-M5 | My Open Actions | count(ActionTaken.assigneeId = me AND status IN (PLANNED, IN_PROGRESS)) | `/queue?actionAssignee=me` |
+| ST-M5 | Tickets with My Open Actions | count(DISTINCT Tickets having an ActionTaken with assigneeId = me AND status IN (PLANNED, IN_PROGRESS)) | `/queue?actionAssignee=me` |
 | ST-M6 | Follow-ups Pending | count(Tickets active with ≥1 COMPLETED action where followUpRequired = true) | `/queue?followUp=pending` |
 | ST-L1 | Recently Updated | top 5 active by updatedAt | Ticket Detail |
 | ST-L2 | Urgent | top 5 active with highest itPriority, oldest createdAt first | Ticket Detail |
 
-**Administrator (`ADMINISTRATOR`):** ST-* plus AD-M1 = count(User) grouped by role and isActive → `/admin/users?role=<R>&active=<bool>`.
+**Administrator (`ADMINISTRATOR`):** ST-* plus AD-M1 = count(User) grouped by role and isActive → `/admin/users?role=<R>`.
 
-- **BR-24** Dashboard metrics are computed by the backend from the database at request time; the client never computes counts from Ticket lists.
+- **BR-24** Dashboard metrics are computed by the backend from the database at request time; the client never computes counts from Ticket lists. Each metric and its drill-down list are built with the same filter function, so a card and the list it opens always show the same number.
 - **BR-25** A metric with no matching records returns `0` (never omitted); an empty list returns `[]`.
 - **BR-26** Legacy Tickets (created before Lab 4) with zero Actions Taken are counted normally; they just cannot pass the resolution gate until an action is completed.
 
@@ -202,7 +202,7 @@ model TicketStatusChange {
 
 ## 8. API Contract
 
-See [api-spec.md](./api-spec.md). New endpoints: list/create/update/transition Actions Taken, Ticket transition, allowed transitions, Requester resolution indication, Requester dashboard, Staff dashboard, health. Uniform error body `{ error: { code, message, details? } }`.
+See [api-spec.md](./api-spec.md). New endpoints: list/create/update/transition Actions Taken, Ticket transition, allowed transitions, Requester resolution indication, Requester dashboard, Staff dashboard, assignee list, readiness check. Uniform error body `{ error: { code, message, details? } }`.
 
 ## 9. Acceptance Criteria
 
@@ -255,3 +255,8 @@ See [api-spec.md](./api-spec.md). New endpoints: list/create/update/transition A
 - **D-05** Time zone for day boundaries is `Asia/Bangkok`.
 - **D-06** Dashboard "+N from yesterday" deltas from the mockup are excluded: they need daily snapshots, which no approved data model provides.
 - **D-07** Unauthorized access to another Requester's resources returns 404 rather than 403, to avoid leaking Ticket existence.
+- **D-08** ST-M5 counts **Tickets** (not actions) that have an open action assigned to the current user, so the card equals the number of rows in its drill-down queue (AC-17).
+- **D-09** Ticket numbers are generated as the highest existing number + 1 (Lab 3 used count + 1, which collides after deletions). Numbers `TKT-<year>-9000xx` are reserved for seed data.
+- **D-10** `GET /api/health` keeps its Lab 1 contract (a Lab 1 test checks it exactly); the database check is a separate `GET /api/health/ready`.
+- **D-11** Assignee pickers use `GET /api/staff/assignees` (active IT Staff and Administrators). The Lab 3 reassign list used the Administrator-only users route and was empty for IT Staff.
+- **D-12** Lab 2–3 regression tests used a password changed by hand on one database; they now use the seeded password so the full suite passes on a fresh `db:reset`. A seeded "new hire" (`paul.martin`) covers the first-login password change.

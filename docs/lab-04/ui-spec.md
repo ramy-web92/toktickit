@@ -8,15 +8,15 @@ Breakpoints: mobile < 768 px (tested at 360), tablet 768–1023 (tested at 768),
 
 | Role | Nav items (left → right) | Landing page after login |
 |---|---|---|
-| Requester | Dashboard · My Tickets · Create Ticket · Profile | `/dashboard` |
-| IT Staff | Dashboard · Queue · Create Ticket · Profile | `/dashboard` |
-| Administrator | Dashboard · Queue · Users · Create Ticket · Profile | `/dashboard` |
+| Requester | Dashboard · My Tickets · Create Ticket | Dashboard |
+| IT Staff | Dashboard · Ticket Queue | Dashboard |
+| Administrator | Dashboard · Ticket Queue · Users | Dashboard |
 
-Active item: underline + `aria-current="page"`. Mobile: nav collapses into a menu button (`aria-expanded`), focus trapped while open, `Esc` closes.
+Active item: filled green pill + `aria-current="page"` (also kept on the related detail page). The user name, role label and Logout stay in the header. On mobile the pills wrap onto a second line instead of a collapsible menu (only 2–3 items).
 
 ## 2. Requester Dashboard (`/dashboard`)
 
-**Structure:** heading "Welcome, {firstName}" (h1) → 4 metric cards (RQ-M1..M4) → two-column area: "Recently Updated" list (left, 2/3) and "Quick Actions" (right, 1/3: Create Ticket, View My Tickets) → "Recently Resolved" list.
+**Structure:** heading "Welcome, {firstName}!" (h2; the app title is the page h1) → 4 metric cards (RQ-M1..M4) → two-column area: "Recently Updated" list (left, 2/3) and "Quick Actions" (right, 1/3: Create Ticket, View My Tickets) → "Recently Resolved" list.
 
 - Metric card = `<a>` wrapping label, value, "View all" text; accessible name "My Open Tickets: 3, view all".
 - List row: Ticket code, title (truncate with ellipsis + full title in `title` attr), status badge (icon + text), relative date with absolute date tooltip.
@@ -26,7 +26,7 @@ Active item: underline + `aria-current="page"`. Mobile: nav collapses into a men
 
 ## 3. IT Staff Dashboard (`/dashboard`)
 
-**Structure:** h1 "Welcome back, {firstName}" + Refresh button → metric cards row (Unassigned, My Assigned, My Open Actions, Follow-ups Pending) → "Tickets by Status" (compact table of 8 rows, each row a link) and "Tickets by IT Priority" (same) side by side → "Urgent" and "Recently Updated" lists → Quick Actions (Create Ticket, Search Tickets, My Queue).
+**Structure:** h1 "Welcome back, {firstName}" + Refresh button → metric cards row (Unassigned, My Assigned, My Open Actions, Follow-ups Pending) → "Tickets by Status" (compact table of 8 rows, each row a link) and "Tickets by IT Priority" (same) side by side → "Urgent" and "Recently Updated" lists → Quick actions are reached through the navigation (Ticket Queue).
 - Admin: extra card group "Users" (active/inactive per role) linking to `/admin/users?...`.
 - Refresh re-fetches; button shows spinner and `aria-busy`; last updated time shown ("Updated 10:42").
 - **Responsive:** desktop 4 cards per row, status/priority tables side by side; tablet 2 per row, tables stacked; mobile 1 per row, everything stacked.
@@ -64,11 +64,15 @@ Buttons: Save (primary, disabled + spinner while submitting), Cancel (secondary;
 
 **Feedback**: validation errors under each field + summary at top linked to fields, focus moves to first error; success Toast "Action saved" (`role="status"`); 409 STALE_UPDATE banner "This action was changed by someone else. Your edits are kept below — review the latest version and save again." with "Show latest" button; network/5xx: banner + Retry, input preserved.
 
+## 4b. Drill-down lists
+
+A card or table row opens the Ticket Queue (staff) or My Tickets (requester) with the same filters already selected. Filters that have no dropdown (`actionAssignee=me`, `followUp=pending`) appear as removable chips above the list. Status and priority badges show readable labels ("In Progress", "High"), and every list row has a real button on the Ticket number for keyboard users.
+
 ## 5. Ticket Workflow control
 
-- Ticket header shows status badge and a "Change status" menu button listing only `allowedTransitions` from the API (labels: "Start work", "Wait for requester", "Resolve", "Close", "Reopen", "Cancel ticket").
+- Ticket header shows the status badge; a "Ticket workflow" box shows one button per transition in `allowedTransitions` from the API (labels: "Open ticket", "Start work", "Wait for requester", "Resolve", "Close", "Reopen", "Cancel ticket") in a group labelled "Change status".
 - If none allowed, the button is not rendered (Closed/Cancelled show "This ticket is closed").
-- "Resolve" disabled-with-reason when gate fails locally (e.g. "Complete all open actions first"); server error RESOLUTION_GATE shown as banner with same text.
+- "Resolve" is always offered when the matrix allows it; the backend applies the resolution gate and its message is shown in a warning banner ("Complete or cancel all open actions before resolving this Ticket.").
 - "Cancel ticket" opens a dialog with required reason (`role="dialog"`, labelled, focus trapped, `Esc` closes, focus returns to trigger).
 - Requester on own active Ticket: existing Lab 3 "Problem appears resolved" button → after success shows "You told IT this looks resolved on {date}. IT Staff will confirm."
 - On success: badge, menu, history and dashboard caches refresh; Toast "Status changed to Resolved".
