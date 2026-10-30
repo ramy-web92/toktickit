@@ -592,7 +592,7 @@ export default function ActionsTaken({ ticketId, canEdit, ticketStatus, currentU
       ) : (
         <>
           {/* Desktop / tablet: table that scrolls inside its own container */}
-          <div className="table-responsive d-none d-md-block">
+          <div className="table-responsive d-none d-md-block" style={{ overflowY: "hidden" }}>
             <table className="table table-sm table-hover align-middle mb-0">
               <caption className="visually-hidden">Actions Taken, oldest first</caption>
               <thead>

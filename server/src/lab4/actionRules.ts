@@ -14,6 +14,9 @@ export const ACTION_LIMITS = {
 /** BR-09: tolerance for client/server clock differences. */
 export const FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
 
+/** BR-09: the UI date/time picker has minute precision. */
+export const PICKER_PRECISION_MS = 60 * 1000;
+
 /** BR-11: permitted Action Taken status transitions. COMPLETED and CANCELLED are final. */
 export const ACTION_TRANSITIONS: Record<ActionStatus, ActionStatus[]> = {
   PLANNED: ["IN_PROGRESS", "COMPLETED", "CANCELLED"],
@@ -124,7 +127,9 @@ export function validateActionFields(
   if (!errors.actionAt) {
     if (value.actionAt.getTime() > ctx.now.getTime() + FUTURE_TOLERANCE_MS)
       errors.actionAt = "Action Date/Time cannot be in the future.";
-    else if (value.actionAt.getTime() < ctx.ticketCreatedAt.getTime())
+    // The date/time picker works in whole minutes, so allow up to 1 minute before
+    // the Ticket's creation second (an action added right after creation must pass).
+    else if (value.actionAt.getTime() < ctx.ticketCreatedAt.getTime() - PICKER_PRECISION_MS)
       errors.actionAt = "Action Date/Time cannot be before the Ticket was created.";
   }
 

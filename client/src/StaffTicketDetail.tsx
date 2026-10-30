@@ -16,7 +16,7 @@ import {
   AdminUserRow,
 } from "./api.js";
 import ActionsTaken from "./ActionsTaken.js";
-import TicketWorkflowControl, { TicketStatusBadge } from "./TicketWorkflow.js";
+import TicketWorkflowControl, { TicketStatusBadge, priorityLabel } from "./TicketWorkflow.js";
 
 type UiState = "loading" | "success" | "error";
 type Tab = "actions" | "comments" | "notes" | "attachments";
@@ -148,7 +148,7 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
   return (
     <div>
       <button className="btn btn-link p-0 mb-3" onClick={onBack}>
-        ← Back to Queue
+        ← Back
       </button>
 
       <div className="card p-4 mb-4">
@@ -175,13 +175,14 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
           <div className="col-md-3">
             <div className="small text-muted">Requested Priority</div>
             <span className="badge bg-success-subtle text-success-emphasis">
-              {ticket.requestedPriority}
+              {priorityLabel(ticket.requestedPriority)}
             </span>
           </div>
           <div className="col-md-3">
             <div className="small text-muted">IT Priority</div>
             <select
               className="form-select form-select-sm"
+              aria-label="IT Priority"
               value={ticket.itPriority}
               onChange={(e) => handlePriorityChange(e.target.value)}
             >
@@ -199,8 +200,11 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
             {ticket.owner ? (
               <div>
                 <div className="mb-1">{ticket.owner.name}</div>
-                <div className="d-flex gap-1">
+                {/* Lab 4: stack on narrow columns so "Reassign to…" is never clipped */}
+                <div className="d-flex flex-wrap gap-1">
                   <select
+                    aria-label="Reassign to"
+                    style={{ minWidth: 0, flex: "1 1 9rem" }}
                     className="form-select form-select-sm"
                     value={reassignTarget}
                     onChange={(e) => setReassignTarget(e.target.value)}
@@ -240,6 +244,7 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
             ticket={ticket}
             onUpdated={(updated) => setTicket((t) => (t ? { ...t, ...updated } : t))}
             onReload={refreshTicket}
+            showBadge={false}
           />
         </div>
 

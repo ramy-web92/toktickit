@@ -34,6 +34,13 @@ export const TRANSITION_LABELS: Record<string, string> = {
   CANCELLED: "Cancel ticket",
 };
 
+const PRIORITY_LABELS: Record<string, string> = { LOW: "Low", MEDIUM: "Medium", HIGH: "High" };
+
+/** Human-readable priority (the API returns LOW / MEDIUM / HIGH). */
+export function priorityLabel(priority: string): string {
+  return PRIORITY_LABELS[priority] ?? priority;
+}
+
 export function statusLabel(status: string): string {
   return TICKET_STATUS_META[status]?.label ?? status;
 }
@@ -195,9 +202,11 @@ interface ControlProps {
   onUpdated: (ticket: WorkflowTicket) => void;
   /** Called when the Ticket must be reloaded (stale data). */
   onReload: () => void;
+  /** Hide the status badge when the page already shows it (avoids a duplicate). */
+  showBadge?: boolean;
 }
 
-export default function TicketWorkflowControl({ ticket, onUpdated, onReload }: ControlProps) {
+export default function TicketWorkflowControl({ ticket, onUpdated, onReload, showBadge = true }: ControlProps) {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ kind: "success" | "error" | "warning"; text: string } | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -248,7 +257,7 @@ export default function TicketWorkflowControl({ ticket, onUpdated, onReload }: C
   return (
     <div>
       <div className="d-flex flex-wrap align-items-center gap-2">
-        <TicketStatusBadge status={ticket.currentStatus} />
+        {showBadge && <TicketStatusBadge status={ticket.currentStatus} />}
         {allowed.length === 0 ? (
           <span className="small text-muted">
             {ticket.currentStatus === "CANCELLED" ? "This Ticket is cancelled." : "No status change available."}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { TicketStatusBadge, statusLabel } from "./TicketWorkflow.js";
+import { TicketStatusBadge, priorityLabel, statusLabel } from "./TicketWorkflow.js";
 import { DevRequester, Category } from "./api.js";
 
 interface TicketRow {
@@ -83,6 +83,7 @@ export default function MyTickets({ requester, categories, onOpenTicket, initial
     <div>
       <div className="d-flex flex-wrap gap-2 mb-3">
         <input
+          aria-label="Search tickets"
           type="text"
           className="form-control"
           style={{ maxWidth: 240 }}
@@ -94,6 +95,7 @@ export default function MyTickets({ requester, categories, onOpenTicket, initial
           }}
         />
         <select
+          aria-label="Category"
           className="form-select"
           style={{ maxWidth: 180 }}
           value={categoryId}
@@ -110,6 +112,7 @@ export default function MyTickets({ requester, categories, onOpenTicket, initial
           ))}
         </select>
         <select
+          aria-label="Requested Priority"
           className="form-select"
           style={{ maxWidth: 160 }}
           value={requestedPriority}
@@ -134,7 +137,7 @@ export default function MyTickets({ requester, categories, onOpenTicket, initial
           }}
         >
           <option value="">All Statuses</option>
-          <option value="active">Open (not resolved/closed/cancelled)</option>
+          <option value="active">Open</option>
           {STATUS_OPTIONS.map((st) => (
             <option key={st} value={st}>
               {statusLabel(st)}
@@ -174,7 +177,9 @@ export default function MyTickets({ requester, categories, onOpenTicket, initial
 
       {state === "success" && tickets.length > 0 && (
         <>
-          <table className="table">
+          {/* Lab 4: wide table scrolls inside its own container, never the page */}
+          <div className="table-responsive">
+          <table className="table align-middle">
             <thead>
               <tr>
                 <th>Ticket No.</th>
@@ -188,12 +193,24 @@ export default function MyTickets({ requester, categories, onOpenTicket, initial
             <tbody>
               {tickets.map((t) => (
                   <tr key={t.id} onClick={() => onOpenTicket(t.id)} style={{ cursor: "pointer" }}>
-                  <td>{t.ticketNumber}</td>
+                  <td>
+                    {/* Lab 4: real button so keyboard users can open the Ticket */}
+                    <button
+                      type="button"
+                      className="btn btn-link p-0 text-nowrap"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenTicket(t.id);
+                      }}
+                    >
+                      {t.ticketNumber}
+                    </button>
+                  </td>
                   <td>{t.summary}</td>
                   <td>{t.category.name}</td>
                   <td>
                     <span className="badge bg-success-subtle text-success-emphasis">
-                      {t.requestedPriority}
+                      {priorityLabel(t.requestedPriority)}
                     </span>
                   </td>
                   <td>
@@ -204,6 +221,7 @@ export default function MyTickets({ requester, categories, onOpenTicket, initial
               ))}
             </tbody>
           </table>
+          </div>
 
           <div className="d-flex justify-content-between align-items-center">
             <span className="small text-muted">

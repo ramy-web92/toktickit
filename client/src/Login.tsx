@@ -27,7 +27,7 @@ export default function Login({ onSuccess }: { onSuccess: (user: AuthUser) => vo
     <div className="container py-5" style={{ maxWidth: 420 }}>
       <div className="card shadow-sm">
         <div className="card-header bg-success text-white">
-          <h1 className="h5 mb-0">TikTockIT</h1>
+          <h1 className="h5 mb-0">TokTickIT</h1>
         </div>
         <div className="card-body">
           <h2 className="h6 mb-3">Sign in to your account</h2>
