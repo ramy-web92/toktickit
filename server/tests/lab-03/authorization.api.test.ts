@@ -21,13 +21,13 @@ describe("Cross-role authorization", () => {
   });
 
   it("blocks a Requester from calling the IT Staff Ticket Queue (403)", async () => {
-    const requester = await loginAs("jennifer.anderson@example.com", "FinalPass456!");
+    const requester = await loginAs("jennifer.anderson@example.com", "Password123!");
     const res = await requester.get("/api/staff/tickets");
     expect(res.status).toBe(403);
   });
 
   it("blocks a Requester from calling Administrator user routes (403)", async () => {
-    const requester = await loginAs("jennifer.anderson@example.com", "FinalPass456!");
+    const requester = await loginAs("jennifer.anderson@example.com", "Password123!");
     const res = await requester.get("/api/admin/users");
     expect(res.status).toBe(403);
   });
@@ -39,7 +39,7 @@ describe("Cross-role authorization", () => {
   });
 
   it("does not leak another requester's ticket (BR-03, AC-03)", async () => {
-    const requesterA = await loginAs("jennifer.anderson@example.com", "FinalPass456!");
+    const requesterA = await loginAs("jennifer.anderson@example.com", "Password123!");
     const ticketRes = await requesterA.get("/api/tickets");
     const ownTicketId = ticketRes.body.tickets[0].id;
 

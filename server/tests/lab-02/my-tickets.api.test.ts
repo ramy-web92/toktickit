@@ -5,7 +5,7 @@ import { app } from "../../src/app.js";
 describe("GET /api/tickets", () => {
   it("returns only tickets owned by the authenticated requester (BR-03)", async () => {
     const agent1 = request.agent(app);
-    await agent1.post("/api/auth/login").send({ email: "jennifer.anderson@example.com", password: "FinalPass456!" });
+    await agent1.post("/api/auth/login").send({ email: "jennifer.anderson@example.com", password: "Password123!" });
     const res1 = await agent1.get("/api/tickets");
 
     const agent2 = request.agent(app);
@@ -23,7 +23,7 @@ describe("GET /api/tickets", () => {
 
   it("filters results by search term with no matches", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "jennifer.anderson@example.com", password: "FinalPass456!" });
+    await agent.post("/api/auth/login").send({ email: "jennifer.anderson@example.com", password: "Password123!" });
 
     const res = await agent.get("/api/tickets?search=zzzznonexistentzzzz");
     expect(res.status).toBe(200);

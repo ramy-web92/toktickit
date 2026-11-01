@@ -5,7 +5,7 @@ import { app } from "../../src/app.js";
 describe("POST /api/tickets", () => {
   it("creates a ticket with valid data using the authenticated requester's identity", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "jennifer.anderson@example.com", password: "FinalPass456!" });
+    await agent.post("/api/auth/login").send({ email: "jennifer.anderson@example.com", password: "Password123!" });
 
     const res = await agent
       .post("/api/tickets")
@@ -22,7 +22,7 @@ describe("POST /api/tickets", () => {
 
   it("rejects a summary that is too short", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "jennifer.anderson@example.com", password: "FinalPass456!" });
+    await agent.post("/api/auth/login").send({ email: "jennifer.anderson@example.com", password: "Password123!" });
 
     const res = await agent
       .post("/api/tickets")

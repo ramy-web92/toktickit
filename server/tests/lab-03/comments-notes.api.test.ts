@@ -10,7 +10,7 @@ async function loginAs(email: string, password: string) {
 
 describe("Public Comments", () => {
   it("Requester can post a comment on their own ticket", async () => {
-    const requester = await loginAs("jennifer.anderson@example.com", "FinalPass456!");
+    const requester = await loginAs("jennifer.anderson@example.com", "Password123!");
     const res = await requester.post("/api/tickets/1/comments").send({ content: "Automated test comment" });
 
     expect(res.status).toBe(201);
@@ -26,7 +26,7 @@ describe("Public Comments", () => {
   });
 
   it("rejects an empty comment", async () => {
-    const requester = await loginAs("jennifer.anderson@example.com", "FinalPass456!");
+    const requester = await loginAs("jennifer.anderson@example.com", "Password123!");
     const res = await requester.post("/api/tickets/1/comments").send({ content: "   " });
 
     expect(res.status).toBe(400);
@@ -40,7 +40,7 @@ describe("Public Comments", () => {
   });
 
   it("both Requester and IT Staff can read comments", async () => {
-    const requester = await loginAs("jennifer.anderson@example.com", "FinalPass456!");
+    const requester = await loginAs("jennifer.anderson@example.com", "Password123!");
     const res = await requester.get("/api/tickets/1/comments");
 
     expect(res.status).toBe(200);
@@ -64,14 +64,14 @@ describe("Internal Notes", () => {
   });
 
   it("blocks a Requester from posting an internal note, without exposing note content (BR-04, AC-04)", async () => {
-    const requester = await loginAs("jennifer.anderson@example.com", "FinalPass456!");
+    const requester = await loginAs("jennifer.anderson@example.com", "Password123!");
     const res = await requester.post("/api/tickets/1/notes").send({ content: "Should never be saved" });
 
     expect(res.status).toBe(403);
   });
 
   it("blocks a Requester from reading internal notes (BR-04, AC-04)", async () => {
-    const requester = await loginAs("jennifer.anderson@example.com", "FinalPass456!");
+    const requester = await loginAs("jennifer.anderson@example.com", "Password123!");
     const res = await requester.get("/api/tickets/1/notes");
 
     expect(res.status).toBe(403);

@@ -7,7 +7,7 @@ describe("Attachment lifecycle", () => {
   let attachmentId: number;
 
   beforeAll(async () => {
-    await agent.post("/api/auth/login").send({ email: "jennifer.anderson@example.com", password: "FinalPass456!" });
+    await agent.post("/api/auth/login").send({ email: "jennifer.anderson@example.com", password: "Password123!" });
 
     const createRes = await agent
       .post("/api/tickets")
