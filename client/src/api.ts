@@ -403,3 +403,104 @@ export async function getAdminUsersList(): Promise<AdminUserRow[]> {
   if (!res.ok) throw { status: res.status, ...data };
   return data.users;
 }
+// ---------------------------------------------------------------------------
+// Lab 4 — Actions Taken (docs/lab-04/api-spec.md)
+
+/** Error thrown by Lab 4 API helpers: HTTP status + the server's error body. */
+export interface ApiError {
+  status: number;
+  error?: { code?: string; message?: string; details?: any };
+}
+
+async function lab4Json<T>(res: Response): Promise<T> {
+  let data: any = null;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+  if (!res.ok) throw { status: res.status, ...(data ?? {}) } as ApiError;
+  return data as T;
+}
+
+export type ActionStatus = "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+
+export interface ActionTakenData {
+  id: number;
+  ticketId: number;
+  actionAt: string;
+  description: string;
+  result: string | null;
+  status: ActionStatus;
+  followUpRequired: boolean;
+  followUpNote: string | null;
+  attachmentNotes: string | null;
+  createdBy: { id: number; name: string };
+  assignee: { id: number; name: string };
+  performedBy: { id: number; name: string } | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ActionInput {
+  actionAt?: string;
+  description?: string;
+  result?: string | null;
+  assigneeId?: number;
+  followUpRequired?: boolean;
+  followUpNote?: string | null;
+  attachmentNotes?: string | null;
+}
+
+export async function getActions(ticketId: number): Promise<ActionTakenData[]> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/actions`, { credentials: "include" });
+  return (await lab4Json<{ items: ActionTakenData[] }>(res)).items;
+}
+
+export async function createAction(ticketId: number, input: ActionInput, idempotencyKey: string): Promise<ActionTakenData> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/actions`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(input),
+  });
+  return lab4Json<ActionTakenData>(res);
+}
+
+export async function updateAction(
+  ticketId: number,
+  actionId: number,
+  input: ActionInput,
+  expectedVersion: number,
+): Promise<ActionTakenData> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/actions/${actionId}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...input, expectedVersion }),
+  });
+  return lab4Json<ActionTakenData>(res);
+}
+
+export async function transitionAction(
+  ticketId: number,
+  actionId: number,
+  to: ActionStatus,
+  expectedVersion: number,
+  result?: string,
+): Promise<ActionTakenData> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/actions/${actionId}/transition`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to, expectedVersion, ...(result !== undefined && { result }) }),
+  });
+  return lab4Json<ActionTakenData>(res);
+}
+
+/** Active IT Staff and Administrators that can be assigned an action (Lab 4). */
+export async function getAssignees(): Promise<{ id: number; name: string; role: string }[]> {
+  const res = await fetch(`${API_URL}/api/staff/assignees`, { credentials: "include" });
+  return (await lab4Json<{ users: { id: number; name: string; role: string }[] }>(res)).users;
+}

@@ -10,14 +10,16 @@ import {
   postComment,
   getStaffUsers,
   getAdminUsersList,
+  getAssignees,
   StaffTicketDetailData,
   InternalNoteData,
   PublicCommentData,
   AdminUserRow,
 } from "./api.js";
+import ActionsTaken from "./ActionsTaken.js";
 
 type UiState = "loading" | "success" | "error";
-type Tab = "comments" | "notes" | "attachments";
+type Tab = "actions" | "comments" | "notes" | "attachments";
 
 const STATUS_TRANSITIONS: Record<string, string[]> = {
   NEW: ["OPEN", "CANCELLED"],
@@ -39,7 +41,7 @@ interface Props {
 export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: Props) {
   const [state, setState] = useState<UiState>("loading");
   const [ticket, setTicket] = useState<StaffTicketDetailData | null>(null);
-  const [tab, setTab] = useState<Tab>("comments");
+  const [tab, setTab] = useState<Tab>("actions");
   const [comments, setComments] = useState<PublicCommentData[]>([]);
   const [notes, setNotes] = useState<InternalNoteData[]>([]);
   const [newEntry, setNewEntry] = useState("");
@@ -47,6 +49,7 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
   const [actionError, setActionError] = useState("");
   const [staffUsers, setStaffUsers] = useState<AdminUserRow[]>([]);
   const [reassignTarget, setReassignTarget] = useState<string>("");
+  const [assignees, setAssignees] = useState<{ id: number; name: string }[]>([]);
 
   useEffect(() => {
     loadAll();
@@ -55,20 +58,31 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
   async function loadAll() {
     setState("loading");
     try {
-      const [t, c, n, staff, admins] = await Promise.all([
+      const [t, c, n, staff, admins, assignable] = await Promise.all([
         getStaffTicketDetail(ticketId),
         getComments(ticketId),
         getInternalNotes(ticketId),
         getStaffUsers().catch(() => []),
         getAdminUsersList().catch(() => []),
+        getAssignees().catch(() => []),
       ]);
       setTicket(t);
       setComments(c);
       setNotes(n);
       setStaffUsers([...staff, ...admins]);
+      setAssignees(assignable);
       setState("success");
     } catch {
       setState("error");
+    }
+  }
+
+  // Lab 4: refresh the Ticket summary without reloading the whole page (FR-12).
+  async function refreshTicket() {
+    try {
+      setTicket(await getStaffTicketDetail(ticketId));
+    } catch {
+      // keep the current view; the next full load will retry
     }
   }
 
@@ -222,11 +236,12 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
                     onChange={(e) => setReassignTarget(e.target.value)}
                   >
                     <option value="">Reassign to…</option>
-                    {staffUsers
-                      .filter((u) => u.isActive && u.id !== ticket.owner?.id)
+                    {/* Lab 4: /api/staff/assignees works for IT Staff too (the admin users list did not) */}
+                    {assignees
+                      .filter((u) => u.id !== ticket.owner?.id)
                       .map((u) => (
                         <option key={u.id} value={u.id}>
-                          {u.name} ({u.role})
+                          {u.name}
                         </option>
                       ))}
                   </select>
@@ -271,6 +286,14 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
         <ul className="nav nav-tabs mb-3">
           <li className="nav-item">
             <button
+              className={`nav-link ${tab === "actions" ? "active" : ""}`}
+              onClick={() => setTab("actions")}
+            >
+              Actions Taken
+            </button>
+          </li>
+          <li className="nav-item">
+            <button
               className={`nav-link ${tab === "comments" ? "active" : ""}`}
               onClick={() => setTab("comments")}
             >
@@ -294,6 +317,17 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
             </button>
           </li>
         </ul>
+
+        {tab === "actions" && (
+          <ActionsTaken
+            ticketId={ticketId}
+            canEdit={true}
+            ticketStatus={ticket.currentStatus}
+            currentUserId={currentUserId}
+            assignees={assignees}
+            onChanged={refreshTicket}
+          />
+        )}
 
         {tab === "comments" && (
   <>

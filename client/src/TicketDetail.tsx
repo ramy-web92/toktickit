@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { DevRequester, PublicCommentData, getComments, postComment, markResolvedByRequester } from "./api.js";
+import ActionsTaken from "./ActionsTaken.js";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -256,6 +257,11 @@ export default function TicketDetail({ ticketId, requester, onBack }: Props) {
           </div>
         ))}
             </div>
+
+      <div className="card p-4 mt-4">
+        <h5 className="mb-3">Actions Taken by IT</h5>
+        <ActionsTaken ticketId={ticketId} canEdit={false} ticketStatus={ticket.currentStatus} />
+      </div>
 
       <div className="card p-4 mt-4">
         <h5 className="mb-3">Public Comments</h5>
