@@ -24,6 +24,14 @@ function ticket(over: Partial<WorkflowTicket> = {}): WorkflowTicket {
   };
 }
 
+// Renders the control and waits for the status history to load, so React state
+// updates finish inside the test (no act() warnings).
+async function renderControl(ui: React.ReactElement) {
+  const utils = render(ui);
+  await screen.findByText(/status history \(/i);
+  return utils;
+}
+
 beforeEach(() => {
   vi.mocked(api.changeTicketStatus).mockReset();
   vi.mocked(api.markProblemResolved).mockReset();
@@ -32,7 +40,7 @@ beforeEach(() => {
 
 describe("TicketWorkflowControl", () => {
   it("UI-11 offers only the transitions allowed by the server", async () => {
-    render(<TicketWorkflowControl ticket={ticket()} onUpdated={vi.fn()} onReload={vi.fn()} />);
+    await renderControl(<TicketWorkflowControl ticket={ticket()} onUpdated={vi.fn()} onReload={vi.fn()} />);
     const group = screen.getByRole("group", { name: /change status/i });
     const labels = Array.from(group.querySelectorAll("button")).map((b) => b.textContent);
     expect(labels).toEqual(["Wait for requester", "Resolve", "Cancel ticket"]);
@@ -40,9 +48,8 @@ describe("TicketWorkflowControl", () => {
     expect(screen.getByText("In Progress")).toBeInTheDocument(); // badge with text
   });
 
-  it("shows no control when nothing is allowed", () => {
-    render(
-      <TicketWorkflowControl ticket={ticket({ currentStatus: "CANCELLED", allowedTransitions: [] })} onUpdated={vi.fn()} onReload={vi.fn()} />,
+  it("shows no control when nothing is allowed", async () => {
+    await renderControl(<TicketWorkflowControl ticket={ticket({ currentStatus: "CANCELLED", allowedTransitions: [] })} onUpdated={vi.fn()} onReload={vi.fn()} />,
     );
     expect(screen.queryByRole("group", { name: /change status/i })).not.toBeInTheDocument();
     expect(screen.getByText(/this ticket is cancelled/i)).toBeInTheDocument();
@@ -50,7 +57,7 @@ describe("TicketWorkflowControl", () => {
 
   it("UI-12 cancel dialog requires a reason, traps focus and closes with Escape", async () => {
     const user = userEvent.setup();
-    render(<TicketWorkflowControl ticket={ticket()} onUpdated={vi.fn()} onReload={vi.fn()} />);
+    await renderControl(<TicketWorkflowControl ticket={ticket()} onUpdated={vi.fn()} onReload={vi.fn()} />);
     const trigger = screen.getByRole("button", { name: "Cancel ticket" });
     await user.click(trigger);
 
@@ -78,7 +85,7 @@ describe("TicketWorkflowControl", () => {
   it("UI-12 sends the reason when cancelling", async () => {
     const user = userEvent.setup();
     vi.mocked(api.changeTicketStatus).mockResolvedValueOnce(ticket({ currentStatus: "CANCELLED", allowedTransitions: [], version: 4 }));
-    render(<TicketWorkflowControl ticket={ticket()} onUpdated={vi.fn()} onReload={vi.fn()} />);
+    await renderControl(<TicketWorkflowControl ticket={ticket()} onUpdated={vi.fn()} onReload={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "Cancel ticket" }));
     await user.type(screen.getByLabelText(/reason/i), "Duplicate request");
     const buttons = screen.getByRole("dialog").querySelectorAll("button");
@@ -91,7 +98,7 @@ describe("TicketWorkflowControl", () => {
     const onUpdated = vi.fn();
     const updated = ticket({ currentStatus: "WAITING_FOR_REQUESTER", version: 4, allowedTransitions: ["IN_PROGRESS", "RESOLVED", "CANCELLED"] });
     vi.mocked(api.changeTicketStatus).mockResolvedValueOnce(updated);
-    render(<TicketWorkflowControl ticket={ticket()} onUpdated={onUpdated} onReload={vi.fn()} />);
+    await renderControl(<TicketWorkflowControl ticket={ticket()} onUpdated={onUpdated} onReload={vi.fn()} />);
     await waitFor(() => expect(api.getStatusHistory).toHaveBeenCalledTimes(1));
 
     await user.click(screen.getByRole("button", { name: "Wait for requester" }));
@@ -107,7 +114,7 @@ describe("TicketWorkflowControl", () => {
       status: 409,
       error: { code: "RESOLUTION_GATE", message: "Complete or cancel all open actions before resolving this Ticket." },
     });
-    render(<TicketWorkflowControl ticket={ticket()} onUpdated={vi.fn()} onReload={vi.fn()} />);
+    await renderControl(<TicketWorkflowControl ticket={ticket()} onUpdated={vi.fn()} onReload={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "Resolve" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/complete or cancel all open actions/i);
   });
@@ -116,7 +123,7 @@ describe("TicketWorkflowControl", () => {
     const user = userEvent.setup();
     const onReload = vi.fn();
     vi.mocked(api.changeTicketStatus).mockRejectedValueOnce({ status: 409, error: { code: "STALE_UPDATE" } });
-    render(<TicketWorkflowControl ticket={ticket()} onUpdated={vi.fn()} onReload={onReload} />);
+    await renderControl(<TicketWorkflowControl ticket={ticket()} onUpdated={vi.fn()} onReload={onReload} />);
     await user.click(screen.getByRole("button", { name: "Resolve" }));
     await waitFor(() => expect(onReload).toHaveBeenCalled());
     expect(screen.getByRole("alert")).toHaveTextContent(/changed by someone else/i);

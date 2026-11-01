@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { TicketStatusBadge, statusLabel } from "./TicketWorkflow.js";
 import { DevRequester, Category } from "./api.js";
 
 interface TicketRow {
@@ -18,10 +19,14 @@ interface Props {
   requester: DevRequester;
   categories: Category[];
   onOpenTicket: (ticketId: number) => void;
+  /** Lab 4: status filter coming from a dashboard drill-down ("active" or a status). */
+  initialStatus?: string;
 }
+
+const STATUS_OPTIONS = ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", "CANCELLED"];
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
-export default function MyTickets({ requester, categories, onOpenTicket }: Props) {
+export default function MyTickets({ requester, categories, onOpenTicket, initialStatus = "" }: Props) {
   const [state, setState] = useState<UiState>("loading");
   const [tickets, setTickets] = useState<TicketRow[]>([]);
   const [totalItems, setTotalItems] = useState(0);
@@ -29,11 +34,12 @@ export default function MyTickets({ requester, categories, onOpenTicket }: Props
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [requestedPriority, setRequestedPriority] = useState("");
+  const [currentStatus, setCurrentStatus] = useState(initialStatus);
   const [hasEverHadTickets, setHasEverHadTickets] = useState(true);
 
   useEffect(() => {
     loadTickets();
-  }, [requester, page, search, categoryId, requestedPriority]);
+  }, [requester, page, search, categoryId, requestedPriority, currentStatus]);
 
   async function loadTickets() {
     setState("loading");
@@ -44,6 +50,7 @@ export default function MyTickets({ requester, categories, onOpenTicket }: Props
       if (search) params.set("search", search);
       if (categoryId) params.set("categoryId", categoryId);
       if (requestedPriority) params.set("requestedPriority", requestedPriority);
+      if (currentStatus) params.set("currentStatus", currentStatus);
 
           const res = await fetch(`${API_URL}/api/tickets?${params.toString()}`, {
         credentials: "include",
@@ -52,7 +59,7 @@ export default function MyTickets({ requester, categories, onOpenTicket }: Props
       const data = await res.json();
       setTickets(data.tickets);
       setTotalItems(data.pagination.totalItems);
-      if (!search && !categoryId && !requestedPriority) {
+      if (!search && !categoryId && !requestedPriority && !currentStatus) {
         setHasEverHadTickets(data.pagination.totalItems > 0);
       }
       setState("success");
@@ -65,10 +72,11 @@ export default function MyTickets({ requester, categories, onOpenTicket }: Props
     setSearch("");
     setCategoryId("");
     setRequestedPriority("");
+    setCurrentStatus("");
     setPage(1);
   }
 
-  const hasActiveFilters = search !== "" || categoryId !== "" || requestedPriority !== "";
+  const hasActiveFilters = search !== "" || categoryId !== "" || requestedPriority !== "" || currentStatus !== "";
   const totalPages = Math.ceil(totalItems / 10) || 1;
 
   return (
@@ -114,6 +122,24 @@ export default function MyTickets({ requester, categories, onOpenTicket }: Props
           <option value="LOW">Low</option>
           <option value="MEDIUM">Medium</option>
           <option value="HIGH">High</option>
+        </select>
+        <select
+          className="form-select"
+          style={{ maxWidth: 200 }}
+          aria-label="Status"
+          value={currentStatus}
+          onChange={(e) => {
+            setCurrentStatus(e.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="">All Statuses</option>
+          <option value="active">Open (not resolved/closed/cancelled)</option>
+          {STATUS_OPTIONS.map((st) => (
+            <option key={st} value={st}>
+              {statusLabel(st)}
+            </option>
+          ))}
         </select>
         {hasActiveFilters && (
           <button className="btn btn-outline-secondary" onClick={clearFilters}>
@@ -171,9 +197,7 @@ export default function MyTickets({ requester, categories, onOpenTicket }: Props
                     </span>
                   </td>
                   <td>
-                    <span className="badge bg-secondary-subtle text-secondary-emphasis">
-                      {t.currentStatus}
-                    </span>
+                    <TicketStatusBadge status={t.currentStatus} />
                   </td>
                   <td>{new Date(t.updatedAt).toLocaleString()}</td>
                 </tr>

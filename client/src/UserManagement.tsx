@@ -12,13 +12,15 @@ type PanelMode = "closed" | "create" | "edit";
 
 interface Props {
   currentUserId: number;
+  /** Lab 4: role filter coming from the Administrator dashboard drill-down. */
+  initialRole?: string;
 }
 
-export default function UserManagement({ currentUserId }: Props) {
+export default function UserManagement({ currentUserId, initialRole = "" }: Props) {
   const [state, setState] = useState<UiState>("loading");
   const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("");
+  const [roleFilter, setRoleFilter] = useState(initialRole);
 
   const [panelMode, setPanelMode] = useState<PanelMode>("closed");
   const [editingUser, setEditingUser] = useState<AdminUserRow | null>(null);
