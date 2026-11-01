@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { getPrisma } from "./prisma.js";
 import multer from "multer";
 import { createActionsRouter } from "./lab4/actionsRouter.js";
+import { createWorkflowRouter, withAllowedTransitions } from "./lab4/workflowRouter.js";
 
 export const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -51,6 +52,8 @@ function requireRole(...roles: Array<"REQUESTER" | "IT_STAFF" | "ADMINISTRATOR">
 
 // --- Lab 4: Actions Taken ---
 app.use(createActionsRouter({ requireAuth, requireRole }));
+// Lab 4: Ticket workflow (replaces the Lab 3 status and "problem appears resolved" handlers)
+app.use(createWorkflowRouter({ requireAuth, requireRole }));
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -442,17 +445,7 @@ app.delete("/api/attachments/:id", requireAuth, requireRole("REQUESTER"), async 
 
 const ALLOWED_SORT_FIELDS = ["createdAt", "requestedPriority", "itPriority", "currentStatus"] as const;
 
-// BR-13: permitted status transitions per role.
-const STATUS_TRANSITIONS: Record<string, string[]> = {
-  NEW: ["OPEN", "CANCELLED"],
-  OPEN: ["IN_PROGRESS", "WAITING_FOR_REQUESTER", "CANCELLED"],
-  IN_PROGRESS: ["WAITING_FOR_REQUESTER", "RESOLVED", "CANCELLED"],
-  WAITING_FOR_REQUESTER: ["IN_PROGRESS", "RESOLVED", "CANCELLED"],
-  RESOLVED: ["CLOSED", "REOPENED"],
-  CLOSED: ["REOPENED"],
-  REOPENED: ["OPEN", "IN_PROGRESS", "CANCELLED"],
-  CANCELLED: [],
-};
+// BR-13 status transitions now live in src/lab4/ticketWorkflow.ts (Lab 4).
 
 app.get("/api/staff/tickets", requireAuth, requireRole("IT_STAFF", "ADMINISTRATOR"), async (req: Request, res: Response) => {
   try {
@@ -546,7 +539,7 @@ app.get("/api/staff/tickets/:id", requireAuth, requireRole("IT_STAFF", "ADMINIST
       return res.status(404).json({ error: { code: "TICKET_NOT_FOUND" } });
     }
 
-    res.status(200).json({ ticket });
+    res.status(200).json({ ticket: withAllowedTransitions(ticket, req.session.role!) });
   } catch {
     res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
   }
@@ -565,7 +558,7 @@ app.patch("/api/staff/tickets/:id/owner", requireAuth, requireRole("IT_STAFF", "
 
     const ticket = await prisma.ticket.update({
       where: { id: ticketId },
-      data: { ownerId: newOwner.id },
+      data: { ownerId: newOwner.id, version: { increment: 1 } },
     });
 
     res.status(200).json({ ticket });
@@ -586,7 +579,7 @@ app.patch("/api/staff/tickets/:id/priority", requireAuth, requireRole("IT_STAFF"
 
     const ticket = await prisma.ticket.update({
       where: { id: ticketId },
-      data: { itPriority },
+      data: { itPriority, version: { increment: 1 } },
     });
 
     res.status(200).json({ ticket });
@@ -595,34 +588,6 @@ app.patch("/api/staff/tickets/:id/priority", requireAuth, requireRole("IT_STAFF"
   }
 });
 
-app.patch("/api/staff/tickets/:id/status", requireAuth, requireRole("IT_STAFF", "ADMINISTRATOR"), async (req: Request, res: Response) => {
-  try {
-    const prisma = getPrisma();
-    const ticketId = Number(req.params.id);
-    const { status: newStatus } = req.body;
-
-    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
-    if (!ticket) {
-      return res.status(404).json({ error: { code: "TICKET_NOT_FOUND" } });
-    }
-
-    const allowedNextStatuses = STATUS_TRANSITIONS[ticket.currentStatus] || [];
-    if (!allowedNextStatuses.includes(newStatus)) {
-      return res.status(409).json({
-        error: { code: "INVALID_TRANSITION", message: `Cannot move from ${ticket.currentStatus} to ${newStatus}.` },
-      });
-    }
-
-    const updated = await prisma.ticket.update({
-      where: { id: ticketId },
-      data: { currentStatus: newStatus },
-    });
-
-    res.status(200).json({ ticket: updated });
-  } catch {
-    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
-  }
-});
 
 // --- Public Comments (Requester who owns the ticket, or IT Staff/Administrator) ---
 
@@ -730,27 +695,7 @@ app.post("/api/tickets/:id/notes", requireAuth, requireRole("IT_STAFF", "ADMINIS
 
 // --- Requester: mark problem as appearing resolved (BR-05, does not change formal status) ---
 
-app.post("/api/tickets/:id/resolved-by-requester", requireAuth, requireRole("REQUESTER"), async (req: Request, res: Response) => {
-  try {
-    const prisma = getPrisma();
-    const ticketId = Number(req.params.id);
-    const requesterId = req.session.userId!;
-
-    const ticket = await prisma.ticket.findFirst({ where: { id: ticketId, requesterId } });
-    if (!ticket) {
-      return res.status(404).json({ error: { code: "TICKET_NOT_FOUND" } });
-    }
-
-    const updated = await prisma.ticket.update({
-      where: { id: ticketId },
-      data: { requesterMarkedResolved: true },
-    });
-
-    res.status(200).json({ ticket: updated });
-  } catch {
-    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
-  }
-});
+// Handler moved to src/lab4/workflowRouter.ts (Lab 4, BR-19).
 
 // --- Administrator User Management ---
 
