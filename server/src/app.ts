@@ -4,6 +4,7 @@ import session from "express-session";
 import bcrypt from "bcryptjs";
 import { getPrisma } from "./prisma.js";
 import multer from "multer";
+import { createActionsRouter } from "./lab4/actionsRouter.js";
 
 export const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -47,6 +48,9 @@ function requireRole(...roles: Array<"REQUESTER" | "IT_STAFF" | "ADMINISTRATOR">
     next();
   };
 }
+
+// --- Lab 4: Actions Taken ---
+app.use(createActionsRouter({ requireAuth, requireRole }));
 
 const upload = multer({
   storage: multer.memoryStorage(),
