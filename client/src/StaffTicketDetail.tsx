@@ -3,32 +3,25 @@ import {
   getStaffTicketDetail,
   claimOrReassignTicket,
   setItPriority,
-  setTicketStatus,
   getInternalNotes,
   postInternalNote,
   getComments,
   postComment,
   getStaffUsers,
   getAdminUsersList,
+  getAssignees,
   StaffTicketDetailData,
   InternalNoteData,
   PublicCommentData,
   AdminUserRow,
 } from "./api.js";
+import ActionsTaken from "./ActionsTaken.js";
+import TicketWorkflowControl, { TicketStatusBadge, priorityLabel } from "./TicketWorkflow.js";
 
 type UiState = "loading" | "success" | "error";
-type Tab = "comments" | "notes" | "attachments";
+type Tab = "actions" | "comments" | "notes" | "attachments";
 
-const STATUS_TRANSITIONS: Record<string, string[]> = {
-  NEW: ["OPEN", "CANCELLED"],
-  OPEN: ["IN_PROGRESS", "WAITING_FOR_REQUESTER", "CANCELLED"],
-  IN_PROGRESS: ["WAITING_FOR_REQUESTER", "RESOLVED", "CANCELLED"],
-  WAITING_FOR_REQUESTER: ["IN_PROGRESS", "RESOLVED", "CANCELLED"],
-  RESOLVED: ["CLOSED", "REOPENED"],
-  CLOSED: ["REOPENED"],
-  REOPENED: ["OPEN", "IN_PROGRESS", "CANCELLED"],
-  CANCELLED: [],
-};
+// Lab 4: permitted transitions now come from the server (ticket.allowedTransitions).
 
 interface Props {
   ticketId: number;
@@ -39,7 +32,7 @@ interface Props {
 export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: Props) {
   const [state, setState] = useState<UiState>("loading");
   const [ticket, setTicket] = useState<StaffTicketDetailData | null>(null);
-  const [tab, setTab] = useState<Tab>("comments");
+  const [tab, setTab] = useState<Tab>("actions");
   const [comments, setComments] = useState<PublicCommentData[]>([]);
   const [notes, setNotes] = useState<InternalNoteData[]>([]);
   const [newEntry, setNewEntry] = useState("");
@@ -47,6 +40,7 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
   const [actionError, setActionError] = useState("");
   const [staffUsers, setStaffUsers] = useState<AdminUserRow[]>([]);
   const [reassignTarget, setReassignTarget] = useState<string>("");
+  const [assignees, setAssignees] = useState<{ id: number; name: string }[]>([]);
 
   useEffect(() => {
     loadAll();
@@ -55,20 +49,31 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
   async function loadAll() {
     setState("loading");
     try {
-      const [t, c, n, staff, admins] = await Promise.all([
+      const [t, c, n, staff, admins, assignable] = await Promise.all([
         getStaffTicketDetail(ticketId),
         getComments(ticketId),
         getInternalNotes(ticketId),
         getStaffUsers().catch(() => []),
         getAdminUsersList().catch(() => []),
+        getAssignees().catch(() => []),
       ]);
       setTicket(t);
       setComments(c);
       setNotes(n);
       setStaffUsers([...staff, ...admins]);
+      setAssignees(assignable);
       setState("success");
     } catch {
       setState("error");
+    }
+  }
+
+  // Lab 4: refresh the Ticket summary without reloading the whole page (FR-12).
+  async function refreshTicket() {
+    try {
+      setTicket(await getStaffTicketDetail(ticketId));
+    } catch {
+      // keep the current view; the next full load will retry
     }
   }
 
@@ -104,15 +109,7 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
     }
   }
 
-  async function handleStatusChange(value: string) {
-    setActionError("");
-    try {
-      await setTicketStatus(ticketId, value);
-      await loadAll();
-    } catch {
-      setActionError("Unable to update status — that transition may not be permitted.");
-    }
-  }
+
 
   async function handlePostEntry(e: React.FormEvent) {
   e.preventDefault();
@@ -148,12 +145,10 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
     );
   }
 
-  const allowedNextStatuses = STATUS_TRANSITIONS[ticket.currentStatus] || [];
-
   return (
     <div>
       <button className="btn btn-link p-0 mb-3" onClick={onBack}>
-        ← Back to Queue
+        ← Back
       </button>
 
       <div className="card p-4 mb-4">
@@ -180,13 +175,14 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
           <div className="col-md-3">
             <div className="small text-muted">Requested Priority</div>
             <span className="badge bg-success-subtle text-success-emphasis">
-              {ticket.requestedPriority}
+              {priorityLabel(ticket.requestedPriority)}
             </span>
           </div>
           <div className="col-md-3">
             <div className="small text-muted">IT Priority</div>
             <select
               className="form-select form-select-sm"
+              aria-label="IT Priority"
               value={ticket.itPriority}
               onChange={(e) => handlePriorityChange(e.target.value)}
             >
@@ -197,36 +193,29 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
           </div>
           <div className="col-md-3">
             <div className="small text-muted">Current Status</div>
-            <select
-              className="form-select form-select-sm"
-              value={ticket.currentStatus}
-              onChange={(e) => handleStatusChange(e.target.value)}
-            >
-              <option value={ticket.currentStatus}>{ticket.currentStatus}</option>
-              {allowedNextStatuses.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+            <TicketStatusBadge status={ticket.currentStatus} />
           </div>
           <div className="col-md-3">
             <div className="small text-muted">Ticket Owner</div>
             {ticket.owner ? (
               <div>
                 <div className="mb-1">{ticket.owner.name}</div>
-                <div className="d-flex gap-1">
+                {/* Lab 4: stack on narrow columns so "Reassign to…" is never clipped */}
+                <div className="d-flex flex-wrap gap-1">
                   <select
+                    aria-label="Reassign to"
+                    style={{ minWidth: 0, flex: "1 1 9rem" }}
                     className="form-select form-select-sm"
                     value={reassignTarget}
                     onChange={(e) => setReassignTarget(e.target.value)}
                   >
                     <option value="">Reassign to…</option>
-                    {staffUsers
-                      .filter((u) => u.isActive && u.id !== ticket.owner?.id)
+                    {/* Lab 4: /api/staff/assignees works for IT Staff too (the admin users list did not) */}
+                    {assignees
+                      .filter((u) => u.id !== ticket.owner?.id)
                       .map((u) => (
                         <option key={u.id} value={u.id}>
-                          {u.name} ({u.role})
+                          {u.name}
                         </option>
                       ))}
                   </select>
@@ -249,6 +238,16 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
 
         {actionError && <div className="alert alert-danger py-2">{actionError}</div>}
 
+        <div className="border rounded p-3 mb-3">
+          <div className="small text-muted mb-2">Ticket workflow</div>
+          <TicketWorkflowControl
+            ticket={ticket}
+            onUpdated={(updated) => setTicket((t) => (t ? { ...t, ...updated } : t))}
+            onReload={refreshTicket}
+            showBadge={false}
+          />
+        </div>
+
         <div className="mb-2">
           <div className="small text-muted">Summary</div>
           <div>{ticket.summary}</div>
@@ -269,6 +268,14 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
 
       <div className="card p-4">
         <ul className="nav nav-tabs mb-3">
+          <li className="nav-item">
+            <button
+              className={`nav-link ${tab === "actions" ? "active" : ""}`}
+              onClick={() => setTab("actions")}
+            >
+              Actions Taken
+            </button>
+          </li>
           <li className="nav-item">
             <button
               className={`nav-link ${tab === "comments" ? "active" : ""}`}
@@ -294,6 +301,17 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
             </button>
           </li>
         </ul>
+
+        {tab === "actions" && (
+          <ActionsTaken
+            ticketId={ticketId}
+            canEdit={true}
+            ticketStatus={ticket.currentStatus}
+            currentUserId={currentUserId}
+            assignees={assignees}
+            onChanged={refreshTicket}
+          />
+        )}
 
         {tab === "comments" && (
   <>

@@ -4,6 +4,10 @@ import session from "express-session";
 import bcrypt from "bcryptjs";
 import { getPrisma } from "./prisma.js";
 import multer from "multer";
+import { createActionsRouter } from "./lab4/actionsRouter.js";
+import { createWorkflowRouter, withAllowedTransitions } from "./lab4/workflowRouter.js";
+import { createDashboardRouter } from "./lab4/dashboardRouter.js";
+import { requesterListFilters, staffQueueFilters } from "./lab4/dashboard.js";
 
 export const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -47,6 +51,13 @@ function requireRole(...roles: Array<"REQUESTER" | "IT_STAFF" | "ADMINISTRATOR">
     next();
   };
 }
+
+// --- Lab 4: Actions Taken ---
+app.use(createActionsRouter({ requireAuth, requireRole }));
+// Lab 4: Ticket workflow (replaces the Lab 3 status and "problem appears resolved" handlers)
+app.use(createWorkflowRouter({ requireAuth, requireRole }));
+// Lab 4: dashboards
+app.use(createDashboardRouter({ requireAuth, requireRole }));
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -244,7 +255,8 @@ app.get("/api/tickets", requireAuth, requireRole("REQUESTER"), async (req: Reque
     }
     if (categoryId) where.categoryId = categoryId;
     if (requestedPriority) where.requestedPriority = requestedPriority;
-    if (currentStatus) where.currentStatus = currentStatus;
+    // Lab 4: also accepts currentStatus=active (dashboard drill-down)
+    Object.assign(where, requesterListFilters({ currentStatus }));
 
     const [tickets, totalItems] = await Promise.all([
       prisma.ticket.findMany({
@@ -296,8 +308,16 @@ app.post("/api/tickets", requireAuth, requireRole("REQUESTER"), upload.array("at
 
   try {
     const prisma = getPrisma();
-    const count = await prisma.ticket.count();
-    const ticketNumber = `TKT-2026-${String(count + 1).padStart(6, "0")}`;
+    // Lab 4 fix (review of #44): use the highest existing number + 1 instead of count + 1,
+    // so numbers never collide after deletions. 9000xx is reserved for seed data.
+    const prefix = `TKT-${new Date().getFullYear()}-`;
+    const last = await prisma.ticket.findFirst({
+      where: { ticketNumber: { startsWith: prefix, lt: `${prefix}900000` } },
+      orderBy: { ticketNumber: "desc" },
+      select: { ticketNumber: true },
+    });
+    const lastSeq = last ? Number(last.ticketNumber.slice(prefix.length)) || 0 : 0;
+    const ticketNumber = `${prefix}${String(lastSeq + 1).padStart(6, "0")}`;
 
     const ticket = await prisma.ticket.create({
       data: {
@@ -436,19 +456,10 @@ app.delete("/api/attachments/:id", requireAuth, requireRole("REQUESTER"), async 
 
 // --- IT Staff Ticket Queue & Ticket operations ---
 
-const ALLOWED_SORT_FIELDS = ["createdAt", "requestedPriority", "itPriority", "currentStatus"] as const;
+// Lab 4: ticketNumber, summary and updatedAt added (the Lab 3 queue offered them but they were ignored).
+const ALLOWED_SORT_FIELDS = ["createdAt", "updatedAt", "ticketNumber", "summary", "requestedPriority", "itPriority", "currentStatus"] as const;
 
-// BR-13: permitted status transitions per role.
-const STATUS_TRANSITIONS: Record<string, string[]> = {
-  NEW: ["OPEN", "CANCELLED"],
-  OPEN: ["IN_PROGRESS", "WAITING_FOR_REQUESTER", "CANCELLED"],
-  IN_PROGRESS: ["WAITING_FOR_REQUESTER", "RESOLVED", "CANCELLED"],
-  WAITING_FOR_REQUESTER: ["IN_PROGRESS", "RESOLVED", "CANCELLED"],
-  RESOLVED: ["CLOSED", "REOPENED"],
-  CLOSED: ["REOPENED"],
-  REOPENED: ["OPEN", "IN_PROGRESS", "CANCELLED"],
-  CANCELLED: [],
-};
+// BR-13 status transitions now live in src/lab4/ticketWorkflow.ts (Lab 4).
 
 app.get("/api/staff/tickets", requireAuth, requireRole("IT_STAFF", "ADMINISTRATOR"), async (req: Request, res: Response) => {
   try {
@@ -461,9 +472,7 @@ app.get("/api/staff/tickets", requireAuth, requireRole("IT_STAFF", "ADMINISTRATO
       : 10;
 
     const search = (req.query.search as string) || "";
-    const status = req.query.status as string | undefined;
     const category = req.query.category as string | undefined;
-    const owner = req.query.owner as string | undefined;
 
     const sortByRaw = req.query.sortBy as string | undefined;
     const sortBy = ALLOWED_SORT_FIELDS.includes(sortByRaw as any)
@@ -478,16 +487,10 @@ app.get("/api/staff/tickets", requireAuth, requireRole("IT_STAFF", "ADMINISTRATO
         { summary: { contains: search, mode: "insensitive" } },
       ];
     }
-    if (status) where.currentStatus = status;
     if (category) where.category = { name: category };
-
-    if (owner === "unassigned") {
-      where.ownerId = null;
-    } else if (owner === "me") {
-      where.ownerId = req.session.userId;
-    } else if (owner && !isNaN(Number(owner))) {
-      where.ownerId = Number(owner);
-    }
+    // status, owner (Lab 3) + status=active, itPriority, actionAssignee, followUp (Lab 4 drill-down).
+    // Shared with the dashboard so counts and lists always match (AC-17).
+    Object.assign(where, staffQueueFilters(req.query, req.session.userId!));
 
     const [tickets, totalItems] = await Promise.all([
       prisma.ticket.findMany({
@@ -542,7 +545,7 @@ app.get("/api/staff/tickets/:id", requireAuth, requireRole("IT_STAFF", "ADMINIST
       return res.status(404).json({ error: { code: "TICKET_NOT_FOUND" } });
     }
 
-    res.status(200).json({ ticket });
+    res.status(200).json({ ticket: withAllowedTransitions(ticket, req.session.role!) });
   } catch {
     res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
   }
@@ -561,7 +564,7 @@ app.patch("/api/staff/tickets/:id/owner", requireAuth, requireRole("IT_STAFF", "
 
     const ticket = await prisma.ticket.update({
       where: { id: ticketId },
-      data: { ownerId: newOwner.id },
+      data: { ownerId: newOwner.id, version: { increment: 1 } },
     });
 
     res.status(200).json({ ticket });
@@ -582,7 +585,7 @@ app.patch("/api/staff/tickets/:id/priority", requireAuth, requireRole("IT_STAFF"
 
     const ticket = await prisma.ticket.update({
       where: { id: ticketId },
-      data: { itPriority },
+      data: { itPriority, version: { increment: 1 } },
     });
 
     res.status(200).json({ ticket });
@@ -591,34 +594,6 @@ app.patch("/api/staff/tickets/:id/priority", requireAuth, requireRole("IT_STAFF"
   }
 });
 
-app.patch("/api/staff/tickets/:id/status", requireAuth, requireRole("IT_STAFF", "ADMINISTRATOR"), async (req: Request, res: Response) => {
-  try {
-    const prisma = getPrisma();
-    const ticketId = Number(req.params.id);
-    const { status: newStatus } = req.body;
-
-    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
-    if (!ticket) {
-      return res.status(404).json({ error: { code: "TICKET_NOT_FOUND" } });
-    }
-
-    const allowedNextStatuses = STATUS_TRANSITIONS[ticket.currentStatus] || [];
-    if (!allowedNextStatuses.includes(newStatus)) {
-      return res.status(409).json({
-        error: { code: "INVALID_TRANSITION", message: `Cannot move from ${ticket.currentStatus} to ${newStatus}.` },
-      });
-    }
-
-    const updated = await prisma.ticket.update({
-      where: { id: ticketId },
-      data: { currentStatus: newStatus },
-    });
-
-    res.status(200).json({ ticket: updated });
-  } catch {
-    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
-  }
-});
 
 // --- Public Comments (Requester who owns the ticket, or IT Staff/Administrator) ---
 
@@ -726,27 +701,7 @@ app.post("/api/tickets/:id/notes", requireAuth, requireRole("IT_STAFF", "ADMINIS
 
 // --- Requester: mark problem as appearing resolved (BR-05, does not change formal status) ---
 
-app.post("/api/tickets/:id/resolved-by-requester", requireAuth, requireRole("REQUESTER"), async (req: Request, res: Response) => {
-  try {
-    const prisma = getPrisma();
-    const ticketId = Number(req.params.id);
-    const requesterId = req.session.userId!;
-
-    const ticket = await prisma.ticket.findFirst({ where: { id: ticketId, requesterId } });
-    if (!ticket) {
-      return res.status(404).json({ error: { code: "TICKET_NOT_FOUND" } });
-    }
-
-    const updated = await prisma.ticket.update({
-      where: { id: ticketId },
-      data: { requesterMarkedResolved: true },
-    });
-
-    res.status(200).json({ ticket: updated });
-  } catch {
-    res.status(500).json({ error: { code: "INTERNAL_ERROR" } });
-  }
-});
+// Handler moved to src/lab4/workflowRouter.ts (Lab 4, BR-19).
 
 // --- Administrator User Management ---
 

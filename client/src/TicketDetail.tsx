@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { DevRequester, PublicCommentData, getComments, postComment, markResolvedByRequester } from "./api.js";
+import { DevRequester, PublicCommentData, WorkflowTicket, getComments, postComment } from "./api.js";
+import { RequesterResolvedButton, StatusHistory, TicketStatusBadge, priorityLabel } from "./TicketWorkflow.js";
+import ActionsTaken from "./ActionsTaken.js";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
@@ -22,6 +24,8 @@ interface TicketDetailData {
   itPriority: string;
   currentStatus: string;
   requesterMarkedResolved: boolean;
+  requesterMarkedResolvedAt?: string | null;
+  version: number;
   createdAt: string;
   category: { name: string };
   relatedSystem: { name: string };
@@ -44,7 +48,6 @@ export default function TicketDetail({ ticketId, requester, onBack }: Props) {
   const [comments, setComments] = useState<PublicCommentData[]>([]);
   const [newComment, setNewComment] = useState("");
   const [commentState, setCommentState] = useState<"idle" | "submitting" | "error">("idle");
-  const [resolvingState, setResolvingState] = useState<"idle" | "submitting" | "error">("idle");
 
     useEffect(() => {
     loadTicket();
@@ -74,16 +77,7 @@ export default function TicketDetail({ ticketId, requester, onBack }: Props) {
     }
   }
 
-  async function handleMarkResolved() {
-    setResolvingState("submitting");
-    try {
-      await markResolvedByRequester(ticketId);
-      await loadTicket();
-      setResolvingState("idle");
-    } catch {
-      setResolvingState("error");
-    }
-  }
+
 
   async function loadTicket() {
     setState("loading");
@@ -134,7 +128,7 @@ export default function TicketDetail({ ticketId, requester, onBack }: Props) {
   return (
     <div>
       <button className="btn btn-link p-0 mb-3" onClick={onBack}>
-        ← Back to My Tickets
+        ← Back
       </button>
 
       <div className="card p-4 mb-4">
@@ -153,22 +147,20 @@ export default function TicketDetail({ ticketId, requester, onBack }: Props) {
           </div>
           <div className="col-md-3">
             <div className="small text-muted">Status</div>
-            <span className="badge bg-secondary-subtle text-secondary-emphasis">
-              {ticket.currentStatus}
-            </span>
+            <TicketStatusBadge status={ticket.currentStatus} />
           </div>
         </div>
         <div className="row mb-3">
           <div className="col-md-3">
             <div className="small text-muted">Requested Priority</div>
             <span className="badge bg-success-subtle text-success-emphasis">
-              {ticket.requestedPriority}
+              {priorityLabel(ticket.requestedPriority)}
             </span>
           </div>
           <div className="col-md-3">
             <div className="small text-muted">IT Priority</div>
             <span className="badge bg-success-subtle text-success-emphasis">
-              {ticket.itPriority}
+              {priorityLabel(ticket.itPriority)}
             </span>
           </div>
         </div>
@@ -182,22 +174,11 @@ export default function TicketDetail({ ticketId, requester, onBack }: Props) {
         </div>
 
         <div className="border-top pt-3">
-          {ticket.requesterMarkedResolved ? (
-            <span className="badge bg-success-subtle text-success-emphasis">
-              You marked this problem as appearing resolved
-            </span>
-          ) : (
-            <button
-              className="btn btn-outline-success btn-sm"
-              onClick={handleMarkResolved}
-              disabled={resolvingState === "submitting"}
-            >
-              {resolvingState === "submitting" ? "Saving…" : "Problem Appears Resolved"}
-            </button>
-          )}
-          {resolvingState === "error" && (
-            <div className="text-danger small mt-2">Unable to update. Please try again.</div>
-          )}
+          <RequesterResolvedButton
+            ticket={ticket as WorkflowTicket}
+            onUpdated={(updated) => setTicket((t) => (t ? { ...t, ...updated } : t))}
+          />
+          <StatusHistory ticketId={ticketId} refreshKey={0} />
         </div>
       </div>
 
@@ -256,6 +237,11 @@ export default function TicketDetail({ ticketId, requester, onBack }: Props) {
           </div>
         ))}
             </div>
+
+      <div className="card p-4 mt-4">
+        <h5 className="mb-3">Actions Taken by IT</h5>
+        <ActionsTaken ticketId={ticketId} canEdit={false} ticketStatus={ticket.currentStatus} />
+      </div>
 
       <div className="card p-4 mt-4">
         <h5 className="mb-3">Public Comments</h5>

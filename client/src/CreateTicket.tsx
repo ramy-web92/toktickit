@@ -113,6 +113,7 @@ export default function CreateTicket({ requester, categories, onCreated }: Props
           Category <span className="text-danger">*</span>
         </label>
         <select
+          aria-label="Category"
           className={`form-select ${fieldErrors.categoryId ? "is-invalid" : ""}`}
           value={categoryId}
           onChange={(e) => setCategoryId(e.target.value)}
@@ -134,6 +135,7 @@ export default function CreateTicket({ requester, categories, onCreated }: Props
           Related System <span className="text-danger">*</span>
         </label>
         <select
+          aria-label="Related System"
           className={`form-select ${fieldErrors.relatedSystemId ? "is-invalid" : ""}`}
           value={relatedSystemId}
           onChange={(e) => setRelatedSystemId(e.target.value)}
@@ -153,6 +155,7 @@ export default function CreateTicket({ requester, categories, onCreated }: Props
       <div className="mb-3">
         <label className="form-label">Requested Priority</label>
         <select
+          aria-label="Requested Priority"
           className="form-select"
           value={requestedPriority}
           onChange={(e) => setRequestedPriority(e.target.value)}
@@ -168,6 +171,7 @@ export default function CreateTicket({ requester, categories, onCreated }: Props
           Summary <span className="text-danger">*</span>
         </label>
         <input
+          aria-label="Summary"
           type="text"
           className={`form-control ${fieldErrors.summary ? "is-invalid" : ""}`}
           value={summary}
@@ -181,6 +185,7 @@ export default function CreateTicket({ requester, categories, onCreated }: Props
           Description <span className="text-danger">*</span>
         </label>
         <textarea
+          aria-label="Description"
           className={`form-control ${fieldErrors.description ? "is-invalid" : ""}`}
           rows={4}
           value={description}

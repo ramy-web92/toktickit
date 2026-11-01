@@ -216,6 +216,9 @@ export async function getStaffTickets(params: {
   search?: string;
   status?: string;
   owner?: string;
+  itPriority?: string;
+  actionAssignee?: string;
+  followUp?: string;
   sortBy?: string;
   sortDir?: "asc" | "desc";
 }): Promise<StaffQueueResult> {
@@ -224,6 +227,10 @@ export async function getStaffTickets(params: {
   if (params.search) query.set("search", params.search);
   if (params.status) query.set("status", params.status);
   if (params.owner) query.set("owner", params.owner);
+  // Lab 4 drill-down filters
+  if (params.itPriority) query.set("itPriority", params.itPriority);
+  if (params.actionAssignee) query.set("actionAssignee", params.actionAssignee);
+  if (params.followUp) query.set("followUp", params.followUp);
   if (params.sortBy) query.set("sortBy", params.sortBy);
   if (params.sortDir) query.set("sortDir", params.sortDir);
 
@@ -244,6 +251,11 @@ export interface StaffTicketDetailData {
   itPriority: string;
   currentStatus: string;
   requesterMarkedResolved: boolean;
+  requesterMarkedResolvedAt?: string | null;
+  version: number;
+  allowedTransitions?: string[];
+  resolvedAt?: string | null;
+  closedAt?: string | null;
   category: { name: string };
   relatedSystem: { name: string };
   requester: { id: number; name: string };
@@ -402,4 +414,213 @@ export async function getAdminUsersList(): Promise<AdminUserRow[]> {
   const data = await res.json();
   if (!res.ok) throw { status: res.status, ...data };
   return data.users;
+}
+// ---------------------------------------------------------------------------
+// Lab 4 — Actions Taken (docs/lab-04/api-spec.md)
+
+/** Error thrown by Lab 4 API helpers: HTTP status + the server's error body. */
+export interface ApiError {
+  status: number;
+  error?: { code?: string; message?: string; details?: any };
+}
+
+async function lab4Json<T>(res: Response): Promise<T> {
+  let data: any = null;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+  if (!res.ok) throw { status: res.status, ...(data ?? {}) } as ApiError;
+  return data as T;
+}
+
+export type ActionStatus = "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+
+export interface ActionTakenData {
+  id: number;
+  ticketId: number;
+  actionAt: string;
+  description: string;
+  result: string | null;
+  status: ActionStatus;
+  followUpRequired: boolean;
+  followUpNote: string | null;
+  attachmentNotes: string | null;
+  createdBy: { id: number; name: string };
+  assignee: { id: number; name: string };
+  performedBy: { id: number; name: string } | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ActionInput {
+  actionAt?: string;
+  description?: string;
+  result?: string | null;
+  assigneeId?: number;
+  followUpRequired?: boolean;
+  followUpNote?: string | null;
+  attachmentNotes?: string | null;
+}
+
+export async function getActions(ticketId: number): Promise<ActionTakenData[]> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/actions`, { credentials: "include" });
+  return (await lab4Json<{ items: ActionTakenData[] }>(res)).items;
+}
+
+export async function createAction(ticketId: number, input: ActionInput, idempotencyKey: string): Promise<ActionTakenData> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/actions`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+    body: JSON.stringify(input),
+  });
+  return lab4Json<ActionTakenData>(res);
+}
+
+export async function updateAction(
+  ticketId: number,
+  actionId: number,
+  input: ActionInput,
+  expectedVersion: number,
+): Promise<ActionTakenData> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/actions/${actionId}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...input, expectedVersion }),
+  });
+  return lab4Json<ActionTakenData>(res);
+}
+
+export async function transitionAction(
+  ticketId: number,
+  actionId: number,
+  to: ActionStatus,
+  expectedVersion: number,
+  result?: string,
+): Promise<ActionTakenData> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/actions/${actionId}/transition`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to, expectedVersion, ...(result !== undefined && { result }) }),
+  });
+  return lab4Json<ActionTakenData>(res);
+}
+
+/** Active IT Staff and Administrators that can be assigned an action (Lab 4). */
+export async function getAssignees(): Promise<{ id: number; name: string; role: string }[]> {
+  const res = await fetch(`${API_URL}/api/staff/assignees`, { credentials: "include" });
+  return (await lab4Json<{ users: { id: number; name: string; role: string }[] }>(res)).users;
+}
+
+// ---------------------------------------------------------------------------
+// Lab 4 — Ticket workflow (docs/lab-04/api-spec.md, "Ticket Workflow")
+
+export interface WorkflowTicket {
+  id: number;
+  currentStatus: string;
+  version: number;
+  allowedTransitions?: string[];
+  resolvedAt?: string | null;
+  closedAt?: string | null;
+  requesterMarkedResolved: boolean;
+  requesterMarkedResolvedAt?: string | null;
+}
+
+export interface StatusChangeData {
+  id: number;
+  fromStatus: string;
+  toStatus: string;
+  reason: string | null;
+  createdAt: string;
+  actor: { id: number; name: string };
+}
+
+export async function changeTicketStatus(
+  ticketId: number,
+  status: string,
+  expectedVersion: number,
+  reason?: string,
+): Promise<WorkflowTicket> {
+  const res = await fetch(`${API_URL}/api/staff/tickets/${ticketId}/status`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status, expectedVersion, ...(reason !== undefined && { reason }) }),
+  });
+  return (await lab4Json<{ ticket: WorkflowTicket }>(res)).ticket;
+}
+
+export async function getStatusHistory(ticketId: number): Promise<StatusChangeData[]> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/status-history`, { credentials: "include" });
+  return (await lab4Json<{ items: StatusChangeData[] }>(res)).items;
+}
+
+export async function markProblemResolved(ticketId: number): Promise<WorkflowTicket> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/resolved-by-requester`, {
+    method: "POST",
+    credentials: "include",
+  });
+  return (await lab4Json<{ ticket: WorkflowTicket }>(res)).ticket;
+}
+
+// ---------------------------------------------------------------------------
+// Lab 4 — Dashboards (docs/lab-04/api-spec.md, "Dashboards")
+
+export interface DashboardMetric {
+  id: string;
+  label: string;
+  value: number;
+  drillDown: string;
+}
+
+export interface DashboardTicket {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  currentStatus: string;
+  itPriority: string;
+  updatedAt: string;
+  resolvedAt: string | null;
+  requesterMarkedResolved: boolean;
+  owner?: { id: number; name: string } | null;
+}
+
+export interface RequesterDashboardData {
+  generatedAt: string;
+  timeZone: string;
+  metrics: DashboardMetric[];
+  recentlyUpdated: DashboardTicket[];
+  recentlyResolved: DashboardTicket[];
+}
+
+export interface StaffDashboardData {
+  generatedAt: string;
+  timeZone: string;
+  metrics: DashboardMetric[];
+  byStatus: { status: string; value: number; drillDown: string }[];
+  byPriority: { itPriority: string; value: number; drillDown: string }[];
+  recentlyUpdated: DashboardTicket[];
+  urgent: DashboardTicket[];
+  users?: { role: string; active: number; inactive: number; drillDown: string }[];
+}
+
+export async function getRequesterDashboard(): Promise<RequesterDashboardData> {
+  const res = await fetch(`${API_URL}/api/dashboard/requester`, { credentials: "include" });
+  return lab4Json<RequesterDashboardData>(res);
+}
+
+export async function getStaffDashboard(): Promise<StaffDashboardData> {
+  const res = await fetch(`${API_URL}/api/dashboard/staff`, { credentials: "include" });
+  return lab4Json<StaffDashboardData>(res);
+}
+
+/** Splits a dashboard drill-down link ("/queue?status=active") into a target and its filters. */
+export function parseDrillDown(link: string): { target: string; params: Record<string, string> } {
+  const [path, query = ""] = link.split("?");
+  return { target: path.replace(/^\//, ""), params: Object.fromEntries(new URLSearchParams(query)) };
 }

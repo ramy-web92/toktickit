@@ -2,9 +2,11 @@
   "name": "toktickit-e2e",
   "private": true,
   "scripts": {
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:lab4": "playwright test e2e/lab-04"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0"
+    "@playwright/test": "^1.63.0",
+    "@axe-core/playwright": "4.10.1"
   }
 }

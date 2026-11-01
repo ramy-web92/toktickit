@@ -5,7 +5,7 @@ import { app } from "../../src/app.js";
 describe("GET /api/tickets/:id", () => {
   it("returns an owned ticket with its attachments", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "jennifer.anderson@example.com", password: "FinalPass456!" });
+    await agent.post("/api/auth/login").send({ email: "jennifer.anderson@example.com", password: "Password123!" });
 
     const res = await agent.get("/api/tickets/1");
     expect(res.status).toBe(200);

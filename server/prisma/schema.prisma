@@ -54,6 +54,12 @@ model User {
   publicComments     PublicComment[]
   internalNotes      InternalNote[]
 
+  // Lab 4
+  actionsCreated     ActionTaken[]        @relation("ActionCreatedBy")
+  actionsAssigned    ActionTaken[]        @relation("ActionAssignee")
+  actionsPerformed   ActionTaken[]        @relation("ActionPerformedBy")
+  statusChanges      TicketStatusChange[]
+
   @@index([role])
 }
 
@@ -109,16 +115,29 @@ model Ticket {
   // Set by a Requester (FR-07); does not change currentStatus (BR-05).
   requesterMarkedResolved Boolean @default(false)
 
+  // Lab 4 — when the Requester last marked the problem as appearing resolved (BR-19).
+  requesterMarkedResolvedAt DateTime?
+  // Lab 4 — optimistic concurrency (BR-22): incremented on every workflow update.
+  version           Int          @default(1)
+  // Lab 4 — set when the Ticket enters RESOLVED / CLOSED (BR-18).
+  resolvedAt        DateTime?
+  closedAt          DateTime?
+
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
   attachments       Attachment[]
   publicComments    PublicComment[]
   internalNotes     InternalNote[]
+  actionsTaken      ActionTaken[]
+  statusChanges     TicketStatusChange[]
 
   @@index([requesterId])
   @@index([ownerId])
   @@index([currentStatus])
+  @@index([currentStatus, ownerId])
+  @@index([requesterId, currentStatus])
+  @@index([updatedAt])
 }
 
 model Attachment {
@@ -161,4 +180,61 @@ model InternalNote {
   createdAt DateTime @default(now())
 
   @@index([ticketId])
+}
+
+// ---------------------------------------------------------------------------
+// Lab 4 — Actions Taken (BR-01..BR-13). One Ticket has many Actions Taken.
+// Append-only: never deleted; COMPLETED and CANCELLED are final (BR-12).
+enum ActionStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model ActionTaken {
+  id               Int          @id @default(autoincrement())
+  ticketId         Int
+  ticket           Ticket       @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  actionAt         DateTime     @default(now())
+  description      String       @db.VarChar(2000)
+  result           String?      @db.VarChar(2000)
+  status           ActionStatus @default(PLANNED)
+  followUpRequired Boolean      @default(false)
+  followUpNote     String?      @db.VarChar(1000)
+  attachmentNotes  String?      @db.VarChar(500)
+
+  createdById      Int
+  createdBy        User         @relation("ActionCreatedBy", fields: [createdById], references: [id])
+  assigneeId       Int
+  assignee         User         @relation("ActionAssignee", fields: [assigneeId], references: [id])
+  // Set automatically to the user who completes the action (BR-05).
+  performedById    Int?
+  performedBy      User?        @relation("ActionPerformedBy", fields: [performedById], references: [id])
+
+  // Duplicate-submit protection (BR-23).
+  idempotencyKey   String?      @db.VarChar(64)
+  // Optimistic concurrency (BR-22).
+  version          Int          @default(1)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([createdById, ticketId, idempotencyKey])
+  @@index([ticketId, actionAt, id])
+  @@index([assigneeId, status])
+}
+
+// Lab 4 — append-only Ticket status history (BR-21).
+model TicketStatusChange {
+  id         Int          @id @default(autoincrement())
+  ticketId   Int
+  ticket     Ticket       @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  fromStatus TicketStatus
+  toStatus   TicketStatus
+  actorId    Int
+  actor      User         @relation(fields: [actorId], references: [id])
+  reason     String?      @db.VarChar(500)
+  createdAt  DateTime     @default(now())
+
+  @@index([ticketId, createdAt])
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Category, AuthUser, getCurrentUser, logout } from "./api.js";
+import { Category, AuthUser, getCurrentUser, logout, parseDrillDown } from "./api.js";
 import Login from "./Login.js";
 import ChangePassword from "./ChangePassword.js";
 import CreateTicket from "./CreateTicket.js";
@@ -8,16 +8,55 @@ import TicketDetail from "./TicketDetail.js";
 import StaffTicketQueue from "./StaffTicketQueue.js";
 import StaffTicketDetail from "./StaffTicketDetail.js";
 import UserManagement from "./UserManagement.js";
+import { RequesterDashboard, StaffDashboard } from "./Dashboards.js";
 
-type View = "home" | "create-ticket" | "my-tickets" | "ticket-detail" | "staff-queue" | "staff-ticket-detail" | "admin-users";
+type View =
+  | "dashboard"
+  | "create-ticket"
+  | "my-tickets"
+  | "ticket-detail"
+  | "staff-queue"
+  | "staff-ticket-detail"
+  | "admin-users";
 type AuthState = "loading" | "unauthenticated" | "must-change-password" | "authenticated";
+
+interface NavItem {
+  label: string;
+  view: View;
+  /** Views that keep this item marked as the current page. */
+  activeFor: View[];
+}
+
+// Lab 4: role-appropriate navigation with Dashboard as the landing page (ui-spec §1).
+const NAV: Record<string, NavItem[]> = {
+  REQUESTER: [
+    { label: "Dashboard", view: "dashboard", activeFor: ["dashboard"] },
+    { label: "My Tickets", view: "my-tickets", activeFor: ["my-tickets", "ticket-detail"] },
+    { label: "Create Ticket", view: "create-ticket", activeFor: ["create-ticket"] },
+  ],
+  IT_STAFF: [
+    { label: "Dashboard", view: "dashboard", activeFor: ["dashboard"] },
+    { label: "Ticket Queue", view: "staff-queue", activeFor: ["staff-queue", "staff-ticket-detail"] },
+  ],
+  ADMINISTRATOR: [
+    { label: "Dashboard", view: "dashboard", activeFor: ["dashboard"] },
+    { label: "Ticket Queue", view: "staff-queue", activeFor: ["staff-queue", "staff-ticket-detail"] },
+    { label: "Users", view: "admin-users", activeFor: ["admin-users"] },
+  ],
+};
+
+const ROLE_LABELS: Record<string, string> = { REQUESTER: "Requester", IT_STAFF: "IT Staff", ADMINISTRATOR: "Administrator" };
 
 export default function App() {
   const [authState, setAuthState] = useState<AuthState>("loading");
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
-  const [view, setView] = useState<View>("home");
+  const [view, setView] = useState<View>("dashboard");
+  const [returnView, setReturnView] = useState<View>("dashboard");
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
+  // Lab 4: filters passed from a dashboard card to a list (drill-down), and a key to remount the list.
+  const [listFilters, setListFilters] = useState<Record<string, string>>({});
+  const [listKey, setListKey] = useState(0);
 
   useEffect(() => {
     getCurrentUser()
@@ -40,24 +79,39 @@ export default function App() {
   function handleLoginSuccess(user: AuthUser) {
     setCurrentUser(user);
     setAuthState(user.mustChangePassword ? "must-change-password" : "authenticated");
+    setView("dashboard");
   }
 
   async function handleLogout() {
     await logout();
     setCurrentUser(null);
     setAuthState("unauthenticated");
-    setView("home");
+    setView("dashboard");
   }
 
-    function handleOpenTicket(ticketId: number) {
+  function navigate(next: View, filters: Record<string, string> = {}) {
+    setListFilters(filters);
+    setListKey((k) => k + 1);
+    setView(next);
+  }
+
+  function handleOpenTicket(ticketId: number) {
+    setReturnView(view === "dashboard" ? "dashboard" : view);
     setSelectedTicketId(ticketId);
     setView(currentUser?.role === "IT_STAFF" || currentUser?.role === "ADMINISTRATOR" ? "staff-ticket-detail" : "ticket-detail");
+  }
+
+  function handleDrillDown(link: string) {
+    const { target, params } = parseDrillDown(link);
+    if (target === "queue") navigate("staff-queue", params);
+    else if (target === "my-tickets") navigate("my-tickets", params);
+    else if (target === "admin/users") navigate("admin-users", params);
   }
 
   if (authState === "loading") {
     return (
       <div className="container py-5 text-center">
-        <p className="text-muted">Loading…</p>
+        <p className="text-muted" aria-busy="true">Loading…</p>
       </div>
     );
   }
@@ -67,131 +121,106 @@ export default function App() {
   }
 
   if (authState === "must-change-password") {
-    return (
-      <ChangePassword
-        onSuccess={() => setAuthState("authenticated")}
-      />
-    );
+    return <ChangePassword onSuccess={() => setAuthState("authenticated")} />;
   }
 
   // authState === "authenticated" — currentUser is guaranteed non-null here.
   const user = currentUser!;
   // Existing Lab 2 components expect a "requester"-shaped object.
   const requesterCompat = { id: user.id, name: user.name, email: user.email };
+  const isStaff = user.role === "IT_STAFF" || user.role === "ADMINISTRATOR";
+  const navItems = NAV[user.role] ?? [];
 
   return (
-    <div className="container py-5" style={{ maxWidth: 900 }}>
-      <div className="d-flex justify-content-between align-items-center mb-4">
+    <div className="container py-4 py-md-5" style={{ maxWidth: 1100 }}>
+      <header className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <h1 className="h3 mb-0">
           TokTickIT <span className="text-success">IT Service Desk</span>
         </h1>
         <div className="text-end">
           <div className="small text-muted">
-            {user.name} · <span className="badge bg-secondary">{user.role}</span>
+            {user.name} · <span className="badge bg-secondary">{ROLE_LABELS[user.role] ?? user.role}</span>
           </div>
           <button className="btn btn-link btn-sm p-0" onClick={handleLogout}>
             Logout
           </button>
         </div>
-      </div>
+      </header>
 
-      {user.role === "REQUESTER" && (
-        <>
-          <div className="mb-4">
-            <button
-              className={`btn btn-sm me-2 ${
-                view === "my-tickets" || view === "ticket-detail" ? "btn-success" : "btn-outline-success"
-              }`}
-              onClick={() => setView("my-tickets")}
-            >
-              My Tickets
-            </button>
-            <button
-              className={`btn btn-sm ${view === "create-ticket" ? "btn-success" : "btn-outline-success"}`}
-              onClick={() => setView("create-ticket")}
-            >
-              Create Ticket
-            </button>
-          </div>
+      <nav aria-label="Main" className="mb-4">
+        <ul className="nav nav-pills flex-wrap gap-1">
+          {navItems.map((item) => {
+            const active = item.activeFor.includes(view);
+            return (
+              <li className="nav-item" key={item.view}>
+                <button
+                  className={`nav-link ${active ? "active bg-success" : "text-success"}`}
+                  aria-current={active ? "page" : undefined}
+                  onClick={() => navigate(item.view)}
+                >
+                  {item.label}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
 
-          {view === "create-ticket" && (
-            <CreateTicket
-              requester={requesterCompat}
-              categories={categories}
-              onCreated={() => setView("my-tickets")}
-            />
-          )}
-
-          {(view === "my-tickets" || view === "home") && (
-            <MyTickets
-              requester={requesterCompat}
-              categories={categories}
+      <main>
+        {view === "dashboard" &&
+          (isStaff ? (
+            <StaffDashboard userName={user.name} onDrillDown={handleDrillDown} onOpenTicket={handleOpenTicket} />
+          ) : (
+            <RequesterDashboard
+              userName={user.name}
+              onDrillDown={handleDrillDown}
               onOpenTicket={handleOpenTicket}
+              onCreateTicket={() => navigate("create-ticket")}
             />
-          )}
+          ))}
 
-          {view === "ticket-detail" && selectedTicketId && (
-            <TicketDetail
-              ticketId={selectedTicketId}
-              requester={requesterCompat}
-              onBack={() => setView("my-tickets")}
-            />
-          )}
-        </>
-      )}
+        {user.role === "REQUESTER" && (
+          <>
+            {view === "create-ticket" && (
+              <CreateTicket requester={requesterCompat} categories={categories} onCreated={() => navigate("my-tickets")} />
+            )}
 
-            {user.role === "IT_STAFF" && (
-        <>
-          {(view === "staff-queue" || view === "home") && (
-            <StaffTicketQueue currentUserId={user.id} onOpenTicket={handleOpenTicket} />
-          )}
-          {view === "staff-ticket-detail" && selectedTicketId && (
-            <StaffTicketDetail
-              ticketId={selectedTicketId}
-              currentUserId={user.id}
-              onBack={() => setView("staff-queue")}
-            />
-          )}
-        </>
-      )}
+            {view === "my-tickets" && (
+              <MyTickets
+                key={listKey}
+                requester={requesterCompat}
+                categories={categories}
+                onOpenTicket={handleOpenTicket}
+                initialStatus={listFilters.currentStatus}
+              />
+            )}
 
-         {user.role === "ADMINISTRATOR" && (
-  <>
-    <div className="mb-4">
-      <button
-        className={`btn btn-sm me-2 ${view === "staff-queue" || view === "staff-ticket-detail" || view === "home" ? "btn-success" : "btn-outline-success"}`}
-        onClick={() => setView("staff-queue")}
-      >
-        My Queue
-      </button>
-      <button
-        className={`btn btn-sm ${view === "admin-users" ? "btn-success" : "btn-outline-success"}`}
-        onClick={() => setView("admin-users")}
-      >
-        Users
-      </button>
-    </div>
+            {view === "ticket-detail" && selectedTicketId && (
+              <TicketDetail ticketId={selectedTicketId} requester={requesterCompat} onBack={() => setView(returnView)} />
+            )}
+          </>
+        )}
 
-    {(view === "staff-queue" || view === "home") && (
-      <StaffTicketQueue currentUserId={user.id} onOpenTicket={handleOpenTicket} />
-    )}
+        {isStaff && (
+          <>
+            {view === "staff-queue" && (
+              <StaffTicketQueue
+                key={listKey}
+                currentUserId={user.id}
+                onOpenTicket={handleOpenTicket}
+                initialFilters={listFilters}
+              />
+            )}
+            {view === "staff-ticket-detail" && selectedTicketId && (
+              <StaffTicketDetail ticketId={selectedTicketId} currentUserId={user.id} onBack={() => setView(returnView)} />
+            )}
+          </>
+        )}
 
-    {view === "staff-ticket-detail" && selectedTicketId && (
-      <StaffTicketDetail
-        ticketId={selectedTicketId}
-        currentUserId={user.id}
-        onBack={() => setView("staff-queue")}
-      />
-    )}
-
-    {view === "admin-users" && <UserManagement currentUserId={user.id} />}
-  </>
-)}  
-    
-    
-    
-    
-    
+        {user.role === "ADMINISTRATOR" && view === "admin-users" && (
+          <UserManagement key={listKey} currentUserId={user.id} initialRole={listFilters.role} />
+        )}
+      </main>
     </div>
   );
 }

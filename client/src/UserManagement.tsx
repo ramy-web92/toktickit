@@ -12,13 +12,15 @@ type PanelMode = "closed" | "create" | "edit";
 
 interface Props {
   currentUserId: number;
+  /** Lab 4: role filter coming from the Administrator dashboard drill-down. */
+  initialRole?: string;
 }
 
-export default function UserManagement({ currentUserId }: Props) {
+export default function UserManagement({ currentUserId, initialRole = "" }: Props) {
   const [state, setState] = useState<UiState>("loading");
   const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("");
+  const [roleFilter, setRoleFilter] = useState(initialRole);
 
   const [panelMode, setPanelMode] = useState<PanelMode>("closed");
   const [editingUser, setEditingUser] = useState<AdminUserRow | null>(null);
@@ -168,6 +170,7 @@ export default function UserManagement({ currentUserId }: Props) {
           onChange={(e) => setSearch(e.target.value)}
         />
         <select
+          aria-label="Filter by role"
           className="form-select"
           style={{ maxWidth: 200 }}
           value={roleFilter}
@@ -285,6 +288,7 @@ export default function UserManagement({ currentUserId }: Props) {
             <div className="mb-3">
               <label className="form-label">Role *</label>
               <select
+          aria-label="Role"
                 className="form-select"
                 value={formRole}
                 onChange={(e) => setFormRole(e.target.value)}
