@@ -244,6 +244,11 @@ export interface StaffTicketDetailData {
   itPriority: string;
   currentStatus: string;
   requesterMarkedResolved: boolean;
+  requesterMarkedResolvedAt?: string | null;
+  version: number;
+  allowedTransitions?: string[];
+  resolvedAt?: string | null;
+  closedAt?: string | null;
   category: { name: string };
   relatedSystem: { name: string };
   requester: { id: number; name: string };
@@ -503,4 +508,55 @@ export async function transitionAction(
 export async function getAssignees(): Promise<{ id: number; name: string; role: string }[]> {
   const res = await fetch(`${API_URL}/api/staff/assignees`, { credentials: "include" });
   return (await lab4Json<{ users: { id: number; name: string; role: string }[] }>(res)).users;
+}
+
+// ---------------------------------------------------------------------------
+// Lab 4 — Ticket workflow (docs/lab-04/api-spec.md, "Ticket Workflow")
+
+export interface WorkflowTicket {
+  id: number;
+  currentStatus: string;
+  version: number;
+  allowedTransitions?: string[];
+  resolvedAt?: string | null;
+  closedAt?: string | null;
+  requesterMarkedResolved: boolean;
+  requesterMarkedResolvedAt?: string | null;
+}
+
+export interface StatusChangeData {
+  id: number;
+  fromStatus: string;
+  toStatus: string;
+  reason: string | null;
+  createdAt: string;
+  actor: { id: number; name: string };
+}
+
+export async function changeTicketStatus(
+  ticketId: number,
+  status: string,
+  expectedVersion: number,
+  reason?: string,
+): Promise<WorkflowTicket> {
+  const res = await fetch(`${API_URL}/api/staff/tickets/${ticketId}/status`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status, expectedVersion, ...(reason !== undefined && { reason }) }),
+  });
+  return (await lab4Json<{ ticket: WorkflowTicket }>(res)).ticket;
+}
+
+export async function getStatusHistory(ticketId: number): Promise<StatusChangeData[]> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/status-history`, { credentials: "include" });
+  return (await lab4Json<{ items: StatusChangeData[] }>(res)).items;
+}
+
+export async function markProblemResolved(ticketId: number): Promise<WorkflowTicket> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/resolved-by-requester`, {
+    method: "POST",
+    credentials: "include",
+  });
+  return (await lab4Json<{ ticket: WorkflowTicket }>(res)).ticket;
 }

@@ -3,7 +3,6 @@ import {
   getStaffTicketDetail,
   claimOrReassignTicket,
   setItPriority,
-  setTicketStatus,
   getInternalNotes,
   postInternalNote,
   getComments,
@@ -17,20 +16,12 @@ import {
   AdminUserRow,
 } from "./api.js";
 import ActionsTaken from "./ActionsTaken.js";
+import TicketWorkflowControl, { TicketStatusBadge } from "./TicketWorkflow.js";
 
 type UiState = "loading" | "success" | "error";
 type Tab = "actions" | "comments" | "notes" | "attachments";
 
-const STATUS_TRANSITIONS: Record<string, string[]> = {
-  NEW: ["OPEN", "CANCELLED"],
-  OPEN: ["IN_PROGRESS", "WAITING_FOR_REQUESTER", "CANCELLED"],
-  IN_PROGRESS: ["WAITING_FOR_REQUESTER", "RESOLVED", "CANCELLED"],
-  WAITING_FOR_REQUESTER: ["IN_PROGRESS", "RESOLVED", "CANCELLED"],
-  RESOLVED: ["CLOSED", "REOPENED"],
-  CLOSED: ["REOPENED"],
-  REOPENED: ["OPEN", "IN_PROGRESS", "CANCELLED"],
-  CANCELLED: [],
-};
+// Lab 4: permitted transitions now come from the server (ticket.allowedTransitions).
 
 interface Props {
   ticketId: number;
@@ -118,15 +109,7 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
     }
   }
 
-  async function handleStatusChange(value: string) {
-    setActionError("");
-    try {
-      await setTicketStatus(ticketId, value);
-      await loadAll();
-    } catch {
-      setActionError("Unable to update status — that transition may not be permitted.");
-    }
-  }
+
 
   async function handlePostEntry(e: React.FormEvent) {
   e.preventDefault();
@@ -161,8 +144,6 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
       </div>
     );
   }
-
-  const allowedNextStatuses = STATUS_TRANSITIONS[ticket.currentStatus] || [];
 
   return (
     <div>
@@ -211,18 +192,7 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
           </div>
           <div className="col-md-3">
             <div className="small text-muted">Current Status</div>
-            <select
-              className="form-select form-select-sm"
-              value={ticket.currentStatus}
-              onChange={(e) => handleStatusChange(e.target.value)}
-            >
-              <option value={ticket.currentStatus}>{ticket.currentStatus}</option>
-              {allowedNextStatuses.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+            <TicketStatusBadge status={ticket.currentStatus} />
           </div>
           <div className="col-md-3">
             <div className="small text-muted">Ticket Owner</div>
@@ -263,6 +233,15 @@ export default function StaffTicketDetail({ ticketId, currentUserId, onBack }: P
         </div>
 
         {actionError && <div className="alert alert-danger py-2">{actionError}</div>}
+
+        <div className="border rounded p-3 mb-3">
+          <div className="small text-muted mb-2">Ticket workflow</div>
+          <TicketWorkflowControl
+            ticket={ticket}
+            onUpdated={(updated) => setTicket((t) => (t ? { ...t, ...updated } : t))}
+            onReload={refreshTicket}
+          />
+        </div>
 
         <div className="mb-2">
           <div className="small text-muted">Summary</div>
