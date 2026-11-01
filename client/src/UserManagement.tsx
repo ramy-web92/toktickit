@@ -170,6 +170,7 @@ export default function UserManagement({ currentUserId, initialRole = "" }: Prop
           onChange={(e) => setSearch(e.target.value)}
         />
         <select
+          aria-label="Filter by role"
           className="form-select"
           style={{ maxWidth: 200 }}
           value={roleFilter}
@@ -287,6 +288,7 @@ export default function UserManagement({ currentUserId, initialRole = "" }: Prop
             <div className="mb-3">
               <label className="form-label">Role *</label>
               <select
+          aria-label="Role"
                 className="form-select"
                 value={formRole}
                 onChange={(e) => setFormRole(e.target.value)}

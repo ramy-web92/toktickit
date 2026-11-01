@@ -100,8 +100,16 @@ describe("UNIT-04 — Action field validation (BR-07..BR-10)", () => {
   });
 
   it("rejects an action date before the Ticket was created (BR-09)", () => {
-    const before = new Date(ticketCreatedAt.getTime() - 60_000).toISOString();
+    const before = new Date(ticketCreatedAt.getTime() - 2 * 60_000).toISOString();
     expect(validateActionFields({ description: "x", actionAt: before }, empty, ctx).errors.actionAt).toBeDefined();
+  });
+
+  it("accepts the picker's whole minute for a Ticket created seconds ago (BR-09)", () => {
+    const created = new Date("2026-10-20T10:00:42Z");
+    const sameMinute = "2026-10-20T10:00:00.000Z"; // what a minute-precision picker sends
+    expect(
+      validateActionFields({ description: "x", actionAt: sameMinute }, empty, { now: created, ticketCreatedAt: created }).errors,
+    ).toEqual({});
   });
 
   it("rejects an invalid date", () => {

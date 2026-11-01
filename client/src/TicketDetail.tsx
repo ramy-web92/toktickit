@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { DevRequester, PublicCommentData, WorkflowTicket, getComments, postComment } from "./api.js";
-import { RequesterResolvedButton, StatusHistory, TicketStatusBadge } from "./TicketWorkflow.js";
+import { RequesterResolvedButton, StatusHistory, TicketStatusBadge, priorityLabel } from "./TicketWorkflow.js";
 import ActionsTaken from "./ActionsTaken.js";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
@@ -128,7 +128,7 @@ export default function TicketDetail({ ticketId, requester, onBack }: Props) {
   return (
     <div>
       <button className="btn btn-link p-0 mb-3" onClick={onBack}>
-        ← Back to My Tickets
+        ← Back
       </button>
 
       <div className="card p-4 mb-4">
@@ -154,13 +154,13 @@ export default function TicketDetail({ ticketId, requester, onBack }: Props) {
           <div className="col-md-3">
             <div className="small text-muted">Requested Priority</div>
             <span className="badge bg-success-subtle text-success-emphasis">
-              {ticket.requestedPriority}
+              {priorityLabel(ticket.requestedPriority)}
             </span>
           </div>
           <div className="col-md-3">
             <div className="small text-muted">IT Priority</div>
             <span className="badge bg-success-subtle text-success-emphasis">
-              {ticket.itPriority}
+              {priorityLabel(ticket.itPriority)}
             </span>
           </div>
         </div>

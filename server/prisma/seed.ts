@@ -70,6 +70,9 @@ async function main() {
     // Lab 4 — active Requester with zero Tickets (empty dashboard, AC-16).
     // Appended at the end so the ids of earlier users never change.
     { name: "Nina Wong", email: "nina.wong@example.com", role: "REQUESTER" as const, isActive: true },
+
+    // Lab 4 — new hire who must change the initial password (Lab 3 E2E-04).
+    { name: "Paul Martin", email: "paul.martin@example.com", role: "REQUESTER" as const, isActive: true, mustChangePassword: true },
   ];
 
   const createdUsers: Record<string, { id: number }> = {};
@@ -83,7 +86,8 @@ async function main() {
         role: u.role,
         isActive: u.isActive,
         passwordHash,
-        mustChangePassword: false, // seeded users can log in directly for testing
+        // Seeded users can log in directly for testing, except the "new hire" account.
+        mustChangePassword: "mustChangePassword" in u ? Boolean(u.mustChangePassword) : false,
       },
     });
     createdUsers[u.email] = { id: user.id };
@@ -411,6 +415,7 @@ async function main() {
   console.log("IT Staff: kevin.patel@example.com");
   console.log("Administrator: john.smith@example.com");
   console.log("Requester with no tickets (empty dashboard): nina.wong@example.com");
+  console.log("New hire who must change password: paul.martin@example.com");
 }
 
 main()

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getStaffTickets, StaffTicketRow } from "./api.js";
-import { TicketStatusBadge, statusLabel } from "./TicketWorkflow.js";
+import { TicketStatusBadge, priorityLabel, statusLabel } from "./TicketWorkflow.js";
 
 type UiState = "loading" | "success" | "error";
 
@@ -89,10 +89,11 @@ export default function StaffTicketQueue({ currentUserId, onOpenTicket, initialF
 
   return (
     <div>
-      <h4 className="mb-3">My Queue</h4>
+      <h2 className="h4 mb-3">Ticket Queue</h2>
 
       <div className="d-flex flex-wrap gap-2 mb-3">
         <input
+          aria-label="Search tickets"
           type="text"
           className="form-control"
           style={{ maxWidth: 240 }}
@@ -104,6 +105,7 @@ export default function StaffTicketQueue({ currentUserId, onOpenTicket, initialF
           }}
         />
         <select
+          aria-label="Status"
           className="form-select"
           style={{ maxWidth: 200 }}
           value={status}
@@ -113,7 +115,7 @@ export default function StaffTicketQueue({ currentUserId, onOpenTicket, initialF
           }}
         >
           <option value="">All Statuses</option>
-          <option value="active">Active (not resolved/closed/cancelled)</option>
+          <option value="active">Active</option>
           {statusOptions.map((s) => (
             <option key={s} value={s}>
               {statusLabel(s)}
@@ -136,6 +138,7 @@ export default function StaffTicketQueue({ currentUserId, onOpenTicket, initialF
           <option value="LOW">Low</option>
         </select>
         <select
+          aria-label="Owner"
           className="form-select"
           style={{ maxWidth: 180 }}
           value={owner}
@@ -227,17 +230,29 @@ export default function StaffTicketQueue({ currentUserId, onOpenTicket, initialF
               <tbody>
                 {tickets.map((t) => (
                   <tr key={t.id} onClick={() => onOpenTicket(t.id)} style={{ cursor: "pointer" }}>
-                    <td>{t.ticketNumber}</td>
+                    <td>
+                      {/* Lab 4: real button so keyboard users can open the Ticket */}
+                      <button
+                        type="button"
+                        className="btn btn-link p-0 text-nowrap"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenTicket(t.id);
+                        }}
+                      >
+                        {t.ticketNumber}
+                      </button>
+                    </td>
                     <td>{t.summary}</td>
                     <td>{t.category.name}</td>
                     <td>
                       <span className="badge bg-success-subtle text-success-emphasis">
-                        {t.requestedPriority}
+                        {priorityLabel(t.requestedPriority)}
                       </span>
                     </td>
                     <td>
                       <span className="badge bg-success-subtle text-success-emphasis">
-                        {t.itPriority}
+                        {priorityLabel(t.itPriority)}
                       </span>
                     </td>
                     <td>
@@ -257,6 +272,15 @@ export default function StaffTicketQueue({ currentUserId, onOpenTicket, initialF
                 key={t.id}
                 className="card mb-2"
                 onClick={() => onOpenTicket(t.id)}
+                role="button"
+                tabIndex={0}
+                aria-label={`Open ${t.ticketNumber}: ${t.summary}`}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onOpenTicket(t.id);
+                  }
+                }}
                 style={{ cursor: "pointer" }}
               >
                 <div className="card-body py-2 px-3">
@@ -268,10 +292,10 @@ export default function StaffTicketQueue({ currentUserId, onOpenTicket, initialF
                   <div className="d-flex flex-wrap gap-2 small">
                     <span className="text-muted">{t.category.name}</span>
                     <span className="badge bg-success-subtle text-success-emphasis">
-                      Req: {t.requestedPriority}
+                      Req: {priorityLabel(t.requestedPriority)}
                     </span>
                     <span className="badge bg-success-subtle text-success-emphasis">
-                      IT: {t.itPriority}
+                      IT: {priorityLabel(t.itPriority)}
                     </span>
                   </div>
                   <div className="small text-muted mt-2">

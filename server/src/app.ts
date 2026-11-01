@@ -308,8 +308,16 @@ app.post("/api/tickets", requireAuth, requireRole("REQUESTER"), upload.array("at
 
   try {
     const prisma = getPrisma();
-    const count = await prisma.ticket.count();
-    const ticketNumber = `TKT-2026-${String(count + 1).padStart(6, "0")}`;
+    // Lab 4 fix (review of #44): use the highest existing number + 1 instead of count + 1,
+    // so numbers never collide after deletions. 9000xx is reserved for seed data.
+    const prefix = `TKT-${new Date().getFullYear()}-`;
+    const last = await prisma.ticket.findFirst({
+      where: { ticketNumber: { startsWith: prefix, lt: `${prefix}900000` } },
+      orderBy: { ticketNumber: "desc" },
+      select: { ticketNumber: true },
+    });
+    const lastSeq = last ? Number(last.ticketNumber.slice(prefix.length)) || 0 : 0;
+    const ticketNumber = `${prefix}${String(lastSeq + 1).padStart(6, "0")}`;
 
     const ticket = await prisma.ticket.create({
       data: {
